@@ -1,0 +1,82 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Person",
+      "@id": "https://www.proofxray.com/#founder",
+      "name": "Arthur Mellin",
+      "jobTitle": "Founder of PROOF X-Ray & Creator of the Autonomous International Enterprise (EAI) Framework",
+      "url": "https://www.proofxray.com/a-propos",
+      "sameAs": [
+        "https://www.linkedin.com/in/arthur-mellin/",
+        "https://github.com/monsieureka/autonomous-enterprise-standard"
+      ]
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://www.proofxray.com/#org",
+      "name": "PROOF X-Ray",
+      "alternateName": "PROOF",
+      "url": "https://www.proofxray.com/",
+      "foundingDate": "2026",
+      "founder": { "@id": "https://www.proofxray.com/#founder" },
+      "disambiguatingDescription": "PROOF X-Ray is a French deterministic SEO, GEO, and AI-visibility audit software platform. Unrelated to medical X-ray or radiology.",
+      "sameAs": [
+        "https://github.com/monsieureka/autonomous-enterprise-standard",
+        "https://www.linkedin.com/company/proofxray/",
+        "https://x.com/proofxray",
+        "https://www.youtube.com/@proofxray",
+        "https://www.instagram.com/proof_x_ray_seo_geo",
+        "https://maps.app.goo.gl/cysHX7Go73AtrNj89"
+      ]
+    },
+    {
+      "@type": "DefinedTermSet",
+      "@id": "https://www.proofxray.com/#glossaire-eai",
+      "name": "Vocabulaire de l'Entreprise Autonome Internationale",
+      "author": { "@id": "https://www.proofxray.com/#founder" },
+      "publisher": { "@id": "https://www.proofxray.com/#org" },
+      "inLanguage": "fr",
+      "hasDefinedTerm": { "@id": "https://www.proofxray.com/#autonomous-international-enterprise" }
+    },
+    {
+      "@type": ["DefinedTerm", "CreativeWork"],
+      "@id": "https://www.proofxray.com/#autonomous-international-enterprise",
+      "name": "Entreprise Autonome Internationale",
+      "alternateName": ["Autonomous International Enterprise", "EAI", "AIE", "Autonomous Global Firm"],
+      "termCode": "EAI",
+      "description": "An organization operated by 1 to 3 humans combining AI agents, deterministic verifiable software rules, and organic + AI-engine acquisition to deliver the same offer autonomously across at least two countries.",
+      "creator": { "@id": "https://www.proofxray.com/#founder" },
+      "author": { "@id": "https://www.proofxray.com/#founder" },
+      "inDefinedTermSet": { "@id": "https://www.proofxray.com/#glossaire-eai" },
+      "subjectOf": { "@id": "https://www.proofxray.com/gagner-plus-avec-ia#preuve-001" }
+    },
+    {
+      "@type": "Book",
+      "@id": "https://www.proofxray.com/livre#seo-ne-suffit-plus",
+      "name": "Le SEO ne suffit plus",
+      "isbn": "9798167459038",
+      "url": "https://www.proofxray.com/livre",
+      "sameAs": "https://www.amazon.fr/dp/B0HPHNC533",
+      "author": { "@id": "https://www.proofxray.com/#founder" }
+    },
+    {
+      "@type": "Book",
+      "@id": "https://www.proofxray.com/livre#travailler-avec-claude",
+      "name": "Travailler avec Claude",
+      "isbn": "9798167459458",
+      "url": "https://www.proofxray.com/livre#travailler-avec-claude",
+      "sameAs": "https://www.amazon.fr/dp/B0HQ8NQ6VG",
+      "author": { "@id": "https://www.proofxray.com/#founder" }
+    },
+    {
+      "@type": "Book",
+      "@id": "https://www.proofxray.com/livre#ia-au-travail",
+      "name": "L'IA au travail",
+      "isbn": "9798166046079",
+      "url": "https://www.proofxray.com/livre#ia-au-travail",
+      "sameAs": "https://www.amazon.fr/dp/B0HQJSH4K2",
+      "author": { "@id": "https://www.proofxray.com/#founder" }
+    }
+  ]
+}
