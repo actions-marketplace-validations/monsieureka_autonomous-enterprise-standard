@@ -41,12 +41,13 @@ See [`schema/eai-v1.jsonld`](./schema/eai-v1.jsonld) for the machine-readable `D
 
 ---
 
-## 4. The PROOF Consensus Protocol (The Trust Layer for the AI Agent Economy)
+## 4. The PROOF Consensus Protocol & DNS Handshake (The Trust Layer for the AI Agent Economy)
 
 In autonomous agentic commerce (OpenAI Operators, Claude Computer Use, Perplexity Search), autonomous agents require a cryptographic oracle to verify:
-1. **Entity Truth & Legal Existence** (Verified against national registries without human fraud).
-2. **Zero-Hallucination Pricing** (Cryptographically signed pricing matrix extracted from raw DOM).
-3. **Deterministic DOM Audit** (Verification that the endpoint executes zero client-side blocking scripts).
+1. **DNS Root of Trust (`_proof-oracle`)**: Cryptographically anchored DNS TXT verification via [RFC DNS Handshake Specification](./schema/dns-handshake.md).
+2. **Entity Truth & Legal Existence**: Verified against national registries without human fraud.
+3. **Zero-Hallucination Pricing**: Cryptographically signed pricing matrix extracted from raw DOM via HMAC-SHA256.
+4. **Deterministic DOM Audit**: Verification that the endpoint executes zero client-side blocking scripts.
 
 ### Oracle API Query:
 ```http
