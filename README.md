@@ -1,6 +1,6 @@
 # The Autonomous International Enterprise (AIE / EAI) Standard — v1.0
 
-[![PROOF Verified 100/100](https://www.proofxray.com/api/badge?score=100)](https://www.proofxray.com/methodologie)
+[![PROOF Verified 100/100](https://www.proofxray.com/api/badge?domain=proofxray.com)](https://www.proofxray.com/certifie/proofxray.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-B6FF00.svg)](./LICENSE)
 [![Standard: W3C Schema.org](https://img.shields.io/badge/Standard-W3C%20Schema.org-111312.svg)](./schema/eai-v1.jsonld)
 
@@ -27,10 +27,12 @@ In the framework designed by **Arthur Mellin**, an **Autonomous International En
 | Pillar | Live Implementation | Endpoint / Proof |
 | :--- | :--- | :--- |
 | **Platform & Engine** | Deterministic 48-signal / 8-category HTML audit (~10s) | [`https://www.proofxray.com/`](https://www.proofxray.com/) |
-| **Live Self-Audit Score** | **100/100** (SEO 100 · GEO 100 · Conversion 100 · Trust 100 · Mobile 100 · Tech 100 · Perf 96) | [`https://www.proofxray.com/x/P5WrCR_dtfoF`](https://www.proofxray.com/x/P5WrCR_dtfoF) |
-| **Public Verification Badge** | Dynamic embeddable SVG compliance badge | [`https://www.proofxray.com/api/badge`](https://www.proofxray.com/api/badge) |
+| **Live Self-Audit Score** | **100/100** (SEO 100 · GEO 100 · Conversion 100 · Trust 100 · Mobile 100 · Tech 100 · Perf 96) | [`https://www.proofxray.com/certifie/proofxray.com`](https://www.proofxray.com/certifie/proofxray.com) |
+| **JSON Certificate API** | Real-time SHA-256 + HMAC-SHA256 signed public certificate | [`/api/public/v1/certificate?domain=proofxray.com`](https://www.proofxray.com/api/public/v1/certificate?domain=proofxray.com) |
+| **Public Verification Badge** | Real-time Postgres-backed SVG compliance badge | [`/api/badge?domain=proofxray.com`](https://www.proofxray.com/api/badge?domain=proofxray.com) |
+| **Canonical EAI Page & Press** | Official French canonical page + press kit | [`/entreprise-autonome-internationale`](https://www.proofxray.com/entreprise-autonome-internationale) · [`/presse`](https://www.proofxray.com/presse) |
 | **LLM Routing Index** | High-density machine index + full specification | [`llms.txt`](https://www.proofxray.com/llms.txt) · [`llms-full.txt`](https://www.proofxray.com/llms-full.txt) |
-| **A2A Agent Discovery** | Agent-to-Agent discovery card (`/.well-known/agent.json`) | [`agent.json`](https://www.proofxray.com/.well-known/agent.json) |
+| **A2A & Security (RFC 9116)** | Agent-to-Agent discovery card + security policy | [`agent.json`](https://www.proofxray.com/.well-known/agent.json) · [`security.txt`](https://www.proofxray.com/.well-known/security.txt) |
 | **Sovereign Roadmap** | Plan Revenus IA (90-day implementation blueprint) | [`https://www.proofxray.com/gagner-plus-avec-ia`](https://www.proofxray.com/gagner-plus-avec-ia) |
 
 ---
