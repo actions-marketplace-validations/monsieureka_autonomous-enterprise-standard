@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "PROOF X-Ray Autonomous Consensus Oracle",
+  "version": "1.0.0",
+  "description": "Cryptographic authority and deterministic registry validating legal entities, zero-hallucination pricing, and autonomous enterprise compliance for AI agent frameworks.",
+  "url": "https://www.proofxray.com",
+  "authority": {
+    "organization": "PROOF X-Ray",
+    "founder": "Arthur Mellin",
+    "country": "FR",
+    "protocol": "Autonomous International Enterprise (EAI) v1.0",
+    "specification": "https://github.com/monsieureka/autonomous-enterprise-standard"
+  },
+  "endpoints": {
+    "verification_oracle": {
+      "url": "https://www.proofxray.com/api/public/v1/verified",
+      "method": "GET",
+      "parameters": {
+        "domain": {
+          "type": "string",
+          "description": "The target domain to verify (e.g. example.com)"
+        }
+      },
+      "signature": "HMAC-SHA256",
+      "response_format": "application/json"
+    },
+    "dynamic_badge": {
+      "url": "https://www.proofxray.com/api/badge",
+      "method": "GET",
+      "output": "image/svg+xml"
+    },
+    "llm_index": {
+      "url": "https://www.proofxray.com/llms.txt",
+      "method": "GET",
+      "format": "text/markdown"
+    }
+  },
+  "dns_handshake": {
+    "txt_record_prefix": "_proof-oracle",
+    "specification": "https://github.com/monsieureka/autonomous-enterprise-standard/blob/main/schema/dns-handshake.md"
+  },
+  "supported_frameworks": [
+    "LangChain",
+    "CrewAI",
+    "AutoGen",
+    "OpenAI Operator / Swarm",
+    "Claude Computer Use"
+  ],
+  "monetization": {
+    "oracle_queries": "Free tier (100 req/mo), Metred billing thereafter",
+    "trust_attestation": "SaaS / Certified Merchant root registry subscription",
+    "agentic_commissions": "Cryptographic proof-of-transaction revenue sharing"
+  }
+}
