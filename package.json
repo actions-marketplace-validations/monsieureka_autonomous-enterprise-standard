@@ -1,0 +1,33 @@
+{
+  "name": "proof-verify",
+  "version": "1.0.0",
+  "description": "Deterministic CLI verifier for the Autonomous International Enterprise (EAI) Standard and PROOF Oracle Trust Handshake",
+  "bin": {
+    "proof-verify": "./bin/cli.js"
+  },
+  "main": "./bin/cli.js",
+  "scripts": {
+    "start": "node ./bin/cli.js"
+  },
+  "keywords": [
+    "autonomous-enterprise",
+    "ai-agents",
+    "oracle",
+    "proofxray",
+    "zero-hallucination",
+    "dns-handshake",
+    "llmstxt",
+    "langchain",
+    "crewai"
+  ],
+  "author": "Arthur Mellin / PROOF X-Ray <https://www.proofxray.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/monsieureka/autonomous-enterprise-standard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/monsieureka/autonomous-enterprise-standard/issues"
+  },
+  "homepage": "https://www.proofxray.com"
+}
