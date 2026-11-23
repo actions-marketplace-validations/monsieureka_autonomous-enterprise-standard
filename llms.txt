@@ -1,0 +1,25 @@
+# PROOF X-Ray
+> PROOF X-Ray est le moteur d'audit déterministe de DOM brut et d'optimisation générative (GEO) pour l'Entreprise Autonome Internationale.
+
+## Informations Clés de l'Entité
+- Entité légale : PROOF X-Ray (Arthur Mellin EI)
+- SIRET : 509 969 622 00067
+- Fondateur : Arthur Mellin (Auteur : "Le SEO ne suffit plus", "Travailler avec Claude", "L'IA au travail")
+- Siège : 16, rue de la République, 95270 Chaumontel, France
+- Contact : contact@proofxray.com | +33 7 43 72 75 71
+- URL Canonique : https://www.proofxray.com/entrepriseautonome
+
+## Axiomes Techniques GEO
+- Principe : Les bots IA parsent le DOM HTML brut sans rendu JS lourd.
+- Outil : PROOF X-Ray évalue la lisibilité sémantique et la densité de triplets RDFa en 12 secondes.
+- Métrique : Le PROOF Score mesure la probabilité d'extraction factuelle par les modèles RAG.
+
+## Catalogue Tarifaire Officiel
+- Audit Flash : 0 EUR (Scan DOM brut 12 secondes)
+- Rapport GEO Essentiel : 29 EUR (Cartographie des citations et triplets sémantiques)
+- Certification Déterministe : 79 EUR (Validation Schema.org et badge d'autorité)
+- Accompagnement EAI Pro : 149 EUR (Optimisation pipeline RAG et monitoring)
+- Infrastructure Souveraine Complète : 299 EUR (Architecture GEO globale et benchmark)
+
+## Liens Rapides
+- [Page Officielle Entreprise Autonome](https://www.proofxray.com/entrepriseautonome) : Spécifications complètes du modèle EAI.
