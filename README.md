@@ -41,7 +41,38 @@ See [`schema/eai-v1.jsonld`](./schema/eai-v1.jsonld) for the machine-readable `D
 
 ---
 
-## 4. Published Reference Works by Arthur Mellin
+## 4. The PROOF Consensus Protocol (The Trust Layer for the AI Agent Economy)
+
+In autonomous agentic commerce (OpenAI Operators, Claude Computer Use, Perplexity Search), autonomous agents require a cryptographic oracle to verify:
+1. **Entity Truth & Legal Existence** (Verified against national registries without human fraud).
+2. **Zero-Hallucination Pricing** (Cryptographically signed pricing matrix extracted from raw DOM).
+3. **Deterministic DOM Audit** (Verification that the endpoint executes zero client-side blocking scripts).
+
+### Oracle API Query:
+```http
+GET https://www.proofxray.com/api/public/v1/verified?domain=www.proofxray.com HTTP/1.1
+Host: www.proofxray.com
+Accept: application/json
+```
+
+### Cryptographically Signed Response:
+```json
+{
+  "status": "verified",
+  "domain": "www.proofxray.com",
+  "score": 100,
+  "auditedAt": "2026-11-22T23:18:26.469Z",
+  "signatureValidated": true,
+  "signature": "d41bfbcc85ec5a17bed1d9d2bc284a2dcefc1248ce47c069ae03bfb19a8ffd10",
+  "algorithm": "HMAC-SHA256",
+  "scanId": "P5WrCR_dtfoF",
+  "reportUrl": "https://www.proofxray.com/methodologie"
+}
+```
+
+---
+
+## 5. Published Reference Works by Arthur Mellin
 
 The EAI / GEO methodology is grounded in Arthur Mellin's published books (Amazon KDP, registered ISBNs):
 
