@@ -1,0 +1,26 @@
+name: 'PROOF Autonomous Enterprise Verifier'
+description: 'Validates domain readiness for AI agents, DNS root-of-trust (_proof-oracle), and PROOF Oracle attestation in CI/CD pipelines.'
+author: 'Arthur Mellin / PROOF X-Ray'
+
+inputs:
+  domain:
+    description: 'The target domain to verify (e.g. example.com)'
+    required: true
+
+outputs:
+  status:
+    description: 'Compliance status (VERIFIED or UNVERIFIED)'
+  score:
+    description: 'EAI Autonomous Compliance Score (0 to 100)'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run PROOF Verification Audit
+      shell: bash
+      run: |
+        python3 ${{ github.action_path }}/bin/proof-verify.py "${{ inputs.domain }}"
+
+branding:
+  icon: 'shield'
+  color: 'blue'
