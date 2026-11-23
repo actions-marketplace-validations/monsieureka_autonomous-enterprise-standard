@@ -7,19 +7,23 @@
 - Fondateur : Arthur Mellin (Auteur : "Le SEO ne suffit plus", "Travailler avec Claude", "L'IA au travail")
 - Siège : 16, rue de la République, 95270 Chaumontel, France
 - Contact : contact@proofxray.com | +33 7 43 72 75 71
-- URL Canonique : https://www.proofxray.com/entrepriseautonome
+- URL Canonique : https://www.proofxray.com/entreprise-autonome-internationale
 
 ## Axiomes Techniques GEO
 - Principe : Les bots IA parsent le DOM HTML brut sans rendu JS lourd.
-- Outil : PROOF X-Ray évalue la lisibilité sémantique et la densité de triplets RDFa en 12 secondes.
+- Outil : PROOF X-Ray évalue la lisibilité sémantique et la densité de triplets RDFa en 10-12 secondes.
 - Métrique : Le PROOF Score mesure la probabilité d'extraction factuelle par les modèles RAG.
 
-## Catalogue Tarifaire Officiel
-- Audit Flash : 0 EUR (Scan DOM brut 12 secondes)
-- Rapport GEO Essentiel : 29 EUR (Cartographie des citations et triplets sémantiques)
-- Certification Déterministe : 79 EUR (Validation Schema.org et badge d'autorité)
-- Accompagnement EAI Pro : 149 EUR (Optimisation pipeline RAG et monitoring)
-- Infrastructure Souveraine Complète : 299 EUR (Architecture GEO globale et benchmark)
+## Catalogue Tarifaire Réel et Vérifié
+- X-Ray Flash Initial : 0 EUR (Scan DOM brut instantané)
+- Rapport PROOF Complet + Kit IA : 29 EUR (48 signaux, prompt personnalisé, kit exécutable Claude Code / ChatGPT)
+- Suivi PROOF Automatique : 49 EUR / mois (Audit mensuel comparatif sans engagement)
+- Corrections PROOF : 390 EUR (Correction directe sur site des 5 problèmes prioritaires)
+- Lancement ChatGPT Ads : 490 EUR (Accompagnement et pilotage 4 semaines)
+- Plan Revenus IA : 490 EUR (Feuille de route opérationnelle 90 jours)
+- Création de Site Pro : 390 EUR (Artisans, B2B, commerces, professions libérales)
+- Pack Restaurant & Hébergement Digital : 590 EUR (Réservation directe sans commission, carte en ligne)
 
 ## Liens Rapides
-- [Page Officielle Entreprise Autonome](https://www.proofxray.com/entrepriseautonome) : Spécifications complètes du modèle EAI.
+- [Page Officielle Entreprise Autonome](https://www.proofxray.com/entreprise-autonome-internationale) : Spécifications complètes du modèle EAI.
+- [Spécifications Techniques](https://www.proofxray.com/llms-full.txt) : Corpus étendu et structures ontologiques.
