@@ -45,7 +45,7 @@ def write_github_outputs(status: str, score: str, certified: bool):
         fh.write(f"certified={'true' if certified else 'false'}\n")
 
 
-def fetch_json(url: str, accept: str = "application/json, text/plain"):
+def fetch_json(url: str, accept: str = "application/json, text/plain", redirects: int = 3):
     req = urllib.request.Request(url, headers={"User-Agent": "proof-verify-cli/2.0.0", "Accept": accept})
     try:
         with urllib.request.urlopen(req, timeout=8) as res:
@@ -55,6 +55,9 @@ def fetch_json(url: str, accept: str = "application/json, text/plain"):
             except Exception:
                 return res.status, raw
     except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 303, 307, 308) and e.headers.get("Location") and redirects > 0:
+            next_url = urllib.parse.urljoin(url, e.headers.get("Location"))
+            return fetch_json(next_url, accept, redirects - 1)
         return e.code, None
     except Exception:
         return 500, None
