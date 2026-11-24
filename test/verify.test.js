@@ -202,3 +202,11 @@ test('CLI: help exits 0, invalid input exits 2 (no network used)', () => {
   assert.equal(spawnSync(process.execPath, [cli, 'not a domain']).status, 2);
   assert.equal(spawnSync(process.execPath, [cli, 'example.com'], { env: { ...process.env, PROOF_MIN_SCORE: 'abc' } }).status, 2);
 });
+
+test('audit guidance for an unverified domain points to the English audit box and tells how to re-run', () => {
+  const lines = lib.auditGuidance('mon-site.example');
+  assert.equal(lib.AUDIT_URL, 'https://www.proofxray.com/en#audit-gratuit');
+  assert.ok(lines.some((l) => l.includes('https://www.proofxray.com/en#audit-gratuit')));
+  assert.ok(lines.some((l) => l.includes('npx proof-verify mon-site.example')));
+  assert.ok(!lines.join('\n').includes('proofxray.com/#audit-gratuit'));
+});

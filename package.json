@@ -1,6 +1,6 @@
 {
   "name": "proof-verify",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Zero-dependency CLI verifier and MCP server for PROOF X-Ray PROOF-VC v2 certificates: Ed25519 signature checked against a pinned public key, fails closed.",
   "mcpName": "io.github.monsieureka/proof-verify",
   "bin": {

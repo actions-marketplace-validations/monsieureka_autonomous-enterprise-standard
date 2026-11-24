@@ -83,7 +83,8 @@ async function handleToolCall(name, args = {}) {
           certified: false,
           reason: 'no_completed_audit',
           dns: { status: 'not_checked', detail: 'no certificate to compare against' },
-          auditUrl: 'https://www.proofxray.com/#audit-gratuit',
+          auditUrl: lib.AUDIT_URL,
+          auditHint: lib.auditGuidance(domain).join(' '),
           ...(KEY_WARNINGS.length ? { warnings: KEY_WARNINGS } : {}),
         },
       };

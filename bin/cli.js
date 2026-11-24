@@ -84,8 +84,7 @@ async function runAudit() {
     console.log(`\x1b[33m✖ HTTP ${certRes.status}\x1b[0m`);
     console.log('─────────────────────────────────────────────────────────────────────────────');
     console.log(`\x1b[1m\x1b[33mSTATUS: UNVERIFIED (No completed root-homepage audit found for ${cleanDomain})\x1b[0m`);
-    console.log('Run a free 10-second deterministic X-Ray audit at:');
-    console.log('  https://www.proofxray.com/#audit-gratuit\n');
+    console.log(lib.auditGuidance(cleanDomain).join('\n') + '\n');
     process.exit(1);
   }
   console.log('\x1b[32m✔ 200 OK\x1b[0m');
