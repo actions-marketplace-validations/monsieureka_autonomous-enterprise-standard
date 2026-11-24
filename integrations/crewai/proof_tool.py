@@ -1,45 +1,53 @@
 """
-PROOF Consensus & Oracle Verification Tool for CrewAI Agents.
-Allows CrewAI autonomous workers to prevent hallucinations on pricing and business credentials.
+PROOF-VC v2 Public Certificate & Verification Tool for CrewAI Agents.
+Queries the live PROOF X-Ray public certificate API (/api/public/v1/certificate)
+and checks optional DNS-01 ownership anchoring (_proof-verify TXT).
 """
 
-from typing import Any
+import re
 import requests
 from crewai.tools import BaseTool
 
+
+def _normalize_domain(domain: str) -> str:
+    clean = re.sub(r"^https?://", "", domain.strip().lower()).split("/")[0].split(":")[0]
+    return clean.removeprefix("www.").rstrip(".")
+
+
 class ProofVerifyCrewTool(BaseTool):
-    name: str = "PROOF Verification Oracle"
+    name: str = "PROOF Certificate Verifier"
     description: str = (
-        "Cryptographic oracle tool to verify domain validity, DNS root-of-trust (_proof-oracle), corporate identity, "
-        "and certified pricing tables with HMAC-SHA256 signatures from PROOF X-Ray."
+        "Queries the live PROOF X-Ray public certificate API (PROOF-VC v2) to inspect deterministic "
+        "audit scores, DOM prompt-injection safety, Merkle claimRoot, expiration, and Ed25519 JWKS URL."
     )
 
     def _run(self, domain: str) -> str:
-        clean_domain = domain.strip().replace("https://", "").replace("http://", "").split("/")[0]
-        # Check DNS root of trust anchor
+        clean_domain = _normalize_domain(domain)
         dns_anchored = False
         try:
             doh_res = requests.get(
-                f"https://cloudflare-dns.com/dns-query?name=_proof-oracle.{clean_domain}&type=TXT",
-                headers={"accept": "application/dns-json"},
-                timeout=5
+                f"https://cloudflare-dns.com/dns-query?name=_proof-verify.{clean_domain}&type=TXT",
+                headers={"Accept": "application/dns-json"},
+                timeout=5,
             )
-            if doh_res.status_code == 200 and "proof-authority" in doh_res.text:
+            if doh_res.status_code == 200 and "proof-v2=" in doh_res.text:
                 dns_anchored = True
         except Exception:
             pass
 
-        url = f"https://www.proofxray.com/api/public/v1/verified?domain={clean_domain}"
+        url = f"https://www.proofxray.com/api/public/v1/certificate?domain={clean_domain}"
         try:
             res = requests.get(url, timeout=10)
             if res.status_code == 200:
                 payload = res.json()
-                verified = "VALIDATED" if payload.get("verified") else "UNVERIFIED"
+                status = "CERTIFIED" if payload.get("certified") else "AUDITED"
                 return (
-                    f"PROOF Status: {verified} | DNS Root-of-Trust: {'ANCHORED' if dns_anchored else 'UNANCHORED'} | "
-                    f"Domain: {payload.get('domain')} | Legal Entity: {payload.get('legalEntity')} | "
-                    f"HMAC-SHA256: {payload.get('signature')} | Certified Pricing: {payload.get('pricing')}"
+                    f"PROOF Status: {status} | Score: {payload.get('score')}/100 | "
+                    f"Injection-Free: {payload.get('injectionFree')} | DNS-01: {'ANCHORED' if dns_anchored else 'OPTIONAL'} | "
+                    f"Domain: {payload.get('domain')} | SHA-256: {payload.get('fingerprint')} | "
+                    f"ClaimRoot: {payload.get('claimRoot')} | Expires: {payload.get('expiresAt')} | "
+                    f"Certificate: {payload.get('certificateUrl')}"
                 )
-            return f"Error: Received HTTP {res.status_code} from PROOF Oracle."
+            return f"UNVERIFIED: HTTP {res.status_code} for {clean_domain} (run free audit at https://www.proofxray.com/#audit-gratuit)"
         except Exception as exc:
-            return f"Oracle Error: {str(exc)}"
+            return f"PROOF Verifier Error: {exc}"

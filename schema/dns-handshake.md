@@ -1,55 +1,58 @@
-# PROOF Zero-Knowledge DNS Handshake Protocol (RFC Draft v1.0)
+# PROOF-VC v2 DNS-01 Ownership Anchor & Offline Ed25519 Verification (RFC Draft v1.1)
+
+> **Status:** RFC Draft / Implementation Proposal — `/.well-known/jwks.json` and `/api/public/v1/certificate` are live in PROOF-VC v2; DNS-01 ownership enforcement (`_proof-verify`) is optional and rolling out progressively.
 
 ## Abstract
-The **PROOF Zero-Knowledge DNS Handshake Protocol** defines an open, tamper-proof trust anchoring specification for autonomous AI agents, LLM tool-calling engines, and web-scale crawler platforms. 
+The **PROOF-VC v2 Verification Protocol** defines an open, asymmetric, offline-verifiable trust specification for autonomous AI agents, LLM tool-calling engines, and web crawlers.
 
-By binding cryptographic public key signatures to domain infrastructure via standardized DNS TXT records, autonomous agents can mathematically verify a merchant or enterprise's legal status, operational status, and real-time pricing catalog without human intervention or vulnerability to prompt injection / DOM poisoning.
+Unlike symmetric HMAC keys (which **must never** be published in DNS or shared with verifiers), PROOF-VC v2 separates **domain ownership proof** (DNS-01 TXT challenge) from **asymmetric cryptographic attestation** (**Ed25519 / EdDSA** signatures verified against PROOF's public key at `https://www.proofxray.com/.well-known/jwks.json`).
 
 ---
 
-## 1. The DNS Root of Trust (`_proof-oracle` TXT Record)
+## 1. Public Root Key Discovery (RFC 7517 JWKS)
 
-Any enterprise claiming Autonomous Enterprise Standard (EAI / AIE) compliance **must** expose a public TXT record at the subdomain `_proof-oracle.<domain>`:
+All verifiers (agents, CLIs, browsers, Edge Workers) fetch and cache PROOF's Ed25519 public key set once per day:
 
-```dns
-_proof-oracle.example.com.  300  IN  TXT  "proof-version=v1; proof-authority=https://www.proofxray.com/oracle; proof-key=ed25519:e4a7c8...; proof-org-id=FR-849204910"
+```http
+GET https://www.proofxray.com/.well-known/jwks.json HTTP/1.1
+Accept: application/json
 ```
 
-### Parameter Specification:
-| Parameter | Mandatory | Description |
-| :--- | :--- | :--- |
-| `proof-version` | **Yes** | Protocol version (currently `v1`). |
-| `proof-authority`| **Yes** | Designated authoritative oracle URL (Default & Root: `https://www.proofxray.com/oracle`). |
-| `proof-key` | **Yes** | Domain-bound Ed25519 / HMAC-SHA256 verification public key issued by PROOF X-Ray. |
-| `proof-org-id` | Optional | Registered national legal registry entity ID (e.g., SIREN, UID, EIN). |
+---
+
+## 2. Optional DNS-01 Ownership Anchor (`_proof-verify` TXT Record)
+
+To bind a domain's certificate strictly to its verified owner (preventing third-party spoofing), a domain operator publishes a public TXT challenge at `_proof-verify.<domain>`:
+
+```dns
+_proof-verify.example.com.  300  IN  TXT  "proof-v2=challenge:<24-hex-token>;jwks=https://www.proofxray.com/.well-known/jwks.json;kid=proof-root-2026-01"
+```
+
+> **Security invariant:** No private key or symmetric HMAC secret is ever placed in DNS. The TXT record only proves DNS zone control (identical to ACME / Let's Encrypt DNS-01).
 
 ---
 
-## 2. Autonomous Agent Verification Workflow
+## 3. Autonomous Agent Verification Workflow (Offline-Verifiable)
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Agent as Autonomous AI Agent
+    participant JWKS as proofxray.com/.well-known/jwks.json
+    participant CertAPI as proofxray.com/api/public/v1/certificate
     participant DNS as Public DNS / DoH Resolver
-    participant Oracle as PROOF Root Oracle (proofxray.com)
-    participant Target as Merchant / Enterprise API
 
-    Agent->>DNS: Resolve TXT `_proof-oracle.target.com`
-    DNS-->>Agent: Returns proof-authority & proof-key
-    Agent->>Oracle: GET /api/public/v1/verified?domain=target.com&key=proof-key
-    Oracle-->>Agent: Returns signed cryptographic attestation (HMAC-SHA256, Audit Score, Live Pricing Hash)
-    Agent->>Target: Fetch Live Catalog / Complete Automated Transaction
+    Agent->>JWKS: Fetch Ed25519 public JWK (cached 24h)
+    Agent->>CertAPI: GET /api/public/v1/certificate?domain=example.com
+    CertAPI-->>Agent: JSON PROOF-VC v2 (score, claimRoot, injectionFree, expiresAt, Ed25519 signature)
+    Agent->>Agent: Verify SHA-256(JCS(payload)) + now <= expiresAt + Ed25519.verify(pubKey, sig)
+    opt Optional Ownership Check
+        Agent->>DNS: Resolve TXT _proof-verify.example.com (Accept: application/dns-json)
+    end
 ```
 
-1. **DNS Extraction**: The autonomous agent looks up `_proof-oracle.<target-domain>`.
-2. **Authority Discovery**: If `proof-authority` points to `https://www.proofxray.com/oracle`, the agent fetches the canonical verification payload from the PROOF root registry.
-3. **Cryptographic Validation**: The agent validates the returned signature against `proof-key`.
-4. **Execution**: If the validation passes and the tamper-proof pricing hash matches the order payload, the autonomous agent executes the transaction with zero hallucination risk.
-
----
-
-## 3. Why This Is Tamper-Proof
-- **DOM / Scraping Immunity**: Scrapers and LLMs can be tricked by malicious client-side JavaScript or CSS injection. DNS records cannot be manipulated via client injection.
-- **Revocation in Milliseconds**: If an enterprise attempts fraud or pricing manipulation, PROOF X-Ray invalidates the signature key on the oracle instantly, and agent frameworks refuse all future transactions.
-- **Permanent Defensive Moat**: Once an enterprise adds `_proof-oracle` to their DNS zone (Route 53, Cloudflare, OVH), all incoming AI agents query the PROOF authority automatically.
+### Verification Algorithm (Deterministic)
+1. Canonicalize `attestation.payload` using RFC 8785 JCS (sorted keys, no whitespace).
+2. Compute `digest = SHA-256(jcs(payload))` and assert `digest === attestation.digest`.
+3. Assert `Date.now() <= Date.parse(payload.expiresAt)` and `payload.injectionFree === true`.
+4. Verify `Ed25519.verify(publicJwk[kid], "proof-vc-v2\n" + digest, base64urlDecode(signature.value))`.

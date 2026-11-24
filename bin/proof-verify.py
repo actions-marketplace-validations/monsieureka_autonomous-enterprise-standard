@@ -1,113 +1,177 @@
 #!/usr/bin/env python3
 """
-proof-verify: Instant CLI validation engine for the Autonomous International Enterprise (EAI) Standard.
+proof-verify: Standalone Python 3 CLI verifier for the Autonomous International Enterprise (EAI) Standard & PROOF-VC v2.
+Queries live https://www.proofxray.com/api/public/v1/certificate, verifies SHA-256 JCS digest (and Ed25519 offline if
+`cryptography` is installed), and emits GitHub Actions outputs when GITHUB_OUTPUT is set.
 Copyright (c) 2026 Arthur Mellin / PROOF X-Ray (https://www.proofxray.com)
 """
 
-import sys
+import base64
+import hashlib
 import json
-import urllib.request
+import os
+import re
+import sys
 import urllib.error
+import urllib.parse
+import urllib.request
+
+DOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
+
 
 def print_help():
-    print("""
-\033[1m\033[36m⚡ PROOF X-Ray: Autonomous Enterprise Standard CLI Verifier (EAI v1.0)\033[0m
-Author: Arthur Mellin / PROOF X-Ray (https://www.proofxray.com)
-
-\033[1mUsage:\033[0m
-  proof-verify <domain>
-  python3 bin/proof-verify.py <domain>
-
-\033[1mExamples:\033[0m
-  proof-verify www.proofxray.com
-  proof-verify example.com
-""")
+    print(
+        "\nPROOF X-Ray — Autonomous Enterprise Standard CLI Verifier (EAI v1.0 / PROOF-VC v2)\n"
+        "Usage:\n"
+        "  python3 bin/proof-verify.py <domain>\n\n"
+        "Examples:\n"
+        "  python3 bin/proof-verify.py proofxray.com\n"
+        "  python3 bin/proof-verify.py example.com\n"
+    )
     sys.exit(0)
 
-def fetch_json(url):
-    req = urllib.request.Request(
-        url,
-        headers={'User-Agent': 'proof-verify-cli/1.0.0', 'Accept': 'application/json, text/plain'}
-    )
+
+def canonical_json(obj) -> str:
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def write_github_outputs(status: str, score: str, certified: bool):
+    out_path = os.environ.get("GITHUB_OUTPUT")
+    if not out_path:
+        return
+    with open(out_path, "a", encoding="utf-8") as fh:
+        fh.write(f"status={status}\n")
+        fh.write(f"score={score}\n")
+        fh.write(f"certified={'true' if certified else 'false'}\n")
+
+
+def fetch_json(url: str, accept: str = "application/json, text/plain"):
+    req = urllib.request.Request(url, headers={"User-Agent": "proof-verify-cli/2.0.0", "Accept": accept})
     try:
         with urllib.request.urlopen(req, timeout=8) as res:
-            raw = res.read().decode('utf-8')
+            raw = res.read().decode("utf-8", errors="replace")
             try:
                 return res.status, json.loads(raw)
             except Exception:
                 return res.status, raw
     except urllib.error.HTTPError as e:
         return e.code, None
-    except Exception as e:
+    except Exception:
         return 500, None
 
+
+def verify_attestation_offline(attestation: dict):
+    sig = attestation.get("signature") or {}
+    if sig.get("alg") != "Ed25519":
+        return False, "no_ed25519_attestation"
+    expected_digest = hashlib.sha256(canonical_json(attestation.get("payload", {})).encode("utf-8")).hexdigest()
+    if expected_digest != attestation.get("digest"):
+        return False, "digest_mismatch"
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    except ImportError:
+        return True, "digest_ok_ed25519_lib_not_installed"
+
+    jwks_url = sig.get("jwksUrl") or "https://www.proofxray.com/.well-known/jwks.json"
+    st, jwks = fetch_json(jwks_url, "application/json")
+    if st != 200 or not isinstance(jwks, dict):
+        return False, "jwks_unreachable"
+    keys = jwks.get("keys") or []
+    jwk = next((k for k in keys if k.get("kid") == sig.get("kid")), keys[0] if keys else None)
+    if not jwk or not jwk.get("x"):
+        return False, "jwks_key_not_found"
+    x_pad = jwk["x"] + "=" * (-len(jwk["x"]) % 4)
+    sig_pad = sig["value"] + "=" * (-len(sig["value"]) % 4)
+    try:
+        pub = Ed25519PublicKey.from_public_bytes(base64.urlsafe_b64decode(x_pad))
+        pub.verify(base64.urlsafe_b64decode(sig_pad), f"proof-vc-v2\n{expected_digest}".encode("utf-8"))
+        return True, "ed25519_verified_offline"
+    except Exception:
+        return False, "invalid_signature"
+
+
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
         print_help()
 
-    clean_domain = sys.argv[1].strip()
-    for prefix in ('https://', 'http://'):
-        if clean_domain.startswith(prefix):
-            clean_domain = clean_domain[len(prefix):]
-    clean_domain = clean_domain.split('/')[0]
+    raw = sys.argv[1].strip().lower()
+    raw = re.sub(r"^https?://", "", raw).split("/")[0].split(":")[0].removeprefix("www.").rstrip(".")
+    if not DOMAIN_RE.match(raw):
+        print(f"Error: invalid domain '{sys.argv[1]}'", file=sys.stderr)
+        write_github_outputs("INVALID", "", False)
+        sys.exit(2)
 
-    print(f"\n\033[1m\033[34m[PROOF Oracle]\033[0m Auditing domain for Autonomous Agent Compliance: \033[1m\033[37m{clean_domain}\033[0m")
+    min_score = int(os.environ.get("PROOF_MIN_SCORE", "80"))
+    print(f"\n[PROOF-VC v2] Verifying domain: {raw}")
     print("─" * 77)
 
-    # 1. DNS Root of Trust via DoH
-    sys.stdout.write(f"• Checking DNS Root-of-Trust (_proof-oracle.{clean_domain})... ")
+    # 1. DNS-01 Ownership TXT (_proof-verify.<domain>)
+    sys.stdout.write(f"• DNS-01 Ownership TXT (_proof-verify.{raw})... ")
     sys.stdout.flush()
-    status, doh = fetch_json(f"https://cloudflare-dns.com/dns-query?name=_proof-oracle.{clean_domain}&type=TXT")
-    has_dns_anchor = False
-    if isinstance(doh, dict) and "Answer" in doh:
-        for ans in doh["Answer"]:
-            if "proof-authority" in ans.get("data", ""):
-                has_dns_anchor = True
-                break
+    doh_status, doh = fetch_json(
+        f"https://cloudflare-dns.com/dns-query?name=_proof-verify.{urllib.parse.quote(raw)}&type=TXT",
+        "application/dns-json",
+    )
+    has_dns = False
+    if doh_status == 200 and isinstance(doh, dict):
+        has_dns = any("proof-v2=" in str(a.get("data", "")) for a in doh.get("Answer", []))
+    print("✔ ANCHORED" if has_dns else "○ OPTIONAL (not anchored)")
 
-    if has_dns_anchor:
-        print("\033[32m✔ ANCHORED\033[0m")
-    else:
-        print("\033[33m⚠ UNANCHORED (No _proof-oracle TXT record)\033[0m")
-
-    # 2. Checking llms.txt
-    sys.stdout.write(f"• Checking LLM Agent Routing (https://{clean_domain}/llms.txt)... ")
+    # 2. llms.txt
+    sys.stdout.write(f"• LLM Routing Index (https://{raw}/llms.txt)... ")
     sys.stdout.flush()
-    status, _ = fetch_json(f"https://{clean_domain}/llms.txt")
-    if status == 200:
-        print("\033[32m✔ DETECTED (200 OK)\033[0m")
-    else:
-        print(f"\033[31m✖ MISSING ({status})\033[0m")
+    llms_status, _ = fetch_json(f"https://{raw}/llms.txt", "text/markdown, text/plain")
+    print("✔ 200 OK" if llms_status == 200 else f"✖ {llms_status}")
 
-    # 3. Checking A2A Agent Card
-    sys.stdout.write(f"• Checking Agent-to-Agent Card (https://{clean_domain}/.well-known/agent.json)... ")
+    # 3. A2A Agent Card
+    sys.stdout.write(f"• A2A Agent Card (https://{raw}/.well-known/agent.json)... ")
     sys.stdout.flush()
-    status, _ = fetch_json(f"https://{clean_domain}/.well-known/agent.json")
-    if status == 200:
-        print("\033[32m✔ DETECTED (200 OK)\033[0m")
-    else:
-        print(f"\033[31m✖ MISSING ({status})\033[0m")
+    agent_status, _ = fetch_json(f"https://{raw}/.well-known/agent.json", "application/json")
+    print("✔ 200 OK" if agent_status == 200 else f"✖ {agent_status}")
 
-    # 4. Querying PROOF X-Ray Oracle
-    sys.stdout.write(f"• Requesting Cryptographic Attestation from PROOF Root Oracle... ")
+    # 4. Live Certificate API
+    sys.stdout.write("• Querying PROOF Public Certificate API... ")
     sys.stdout.flush()
-    status, oracle_data = fetch_json(f"https://www.proofxray.com/api/public/v1/verified?domain={clean_domain}")
-    print("\033[32m✔ RESOLVED\033[0m")
-    print("─" * 77)
-
-    if status == 200 and isinstance(oracle_data, dict) and oracle_data.get("verified"):
-        print("\033[1m\033[32m🎉 STATUS: CERTIFIED AUTONOMOUS ENTERPRISE (EAI COMPLIANT 100/100)\033[0m")
-        print(f"  • Legal Entity : \033[1m{oracle_data.get('legalEntity', 'Verified')}\033[0m")
-        print(f"  • Signature    : \033[36m{oracle_data.get('signature', 'HMAC-SHA256-VALID')}\033[0m")
-        print(f"  • Pricing Live : \033[32mTamper-Proof & Non-Hallucinated\033[0m")
-        print(f"  • Audit Link   : https://www.proofxray.com/x/P5WrCR_dtfoF\n")
-        sys.exit(0)
-    else:
-        print("\033[1m\033[33m⚠️  STATUS: UNVERIFIED OR INCOMPLETE COMPLIANCE\033[0m")
-        print("Autonomous agents attempting commercial transactions on this domain may hallucinate.")
-        print("To claim your cryptographic key and establish DNS authority:")
-        print(f"\033[1m\033[36m👉 https://www.proofxray.com/oracle/onboard?domain={clean_domain}\033[0m\n")
+    cert_status, cert = fetch_json(
+        f"https://www.proofxray.com/api/public/v1/certificate?domain={urllib.parse.quote(raw)}",
+        "application/json",
+    )
+    if cert_status != 200 or not isinstance(cert, dict) or cert.get("status") != "verified":
+        print(f"✖ HTTP {cert_status}")
+        print("─" * 77)
+        print(f"STATUS: UNVERIFIED (No completed root-homepage audit found for {raw})")
+        print("Run a free 10-second deterministic X-Ray audit at:")
+        print("  https://www.proofxray.com/#audit-gratuit\n")
+        write_github_outputs("UNVERIFIED", "", False)
         sys.exit(1)
 
-if __name__ == '__main__':
+    print("✔ 200 OK")
+    score = int(cert.get("score", 0))
+    sig_ok = True
+    sig_note = None
+    if isinstance(cert.get("attestation"), dict):
+        sig_ok, sig_note = verify_attestation_offline(cert["attestation"])
+
+    is_certified = bool(cert.get("certified")) and score >= min_score and sig_ok
+    status_label = "CERTIFIED" if is_certified else "AUDITED"
+    write_github_outputs(status_label, str(score), is_certified)
+
+    print("─" * 77)
+    print(f"  • Status         : {status_label}")
+    print(f"  • Domain         : {cert.get('domain')}")
+    print(f"  • PROOF Score    : {score}/100")
+    print(f"  • Audited At     : {cert.get('auditedAt')}")
+    if cert.get("expiresAt"):
+        print(f"  • Expires At     : {cert.get('expiresAt')} ({cert.get('tier', 'snapshot')})")
+    print(f"  • SHA-256 Digest : {cert.get('fingerprint')}")
+    if cert.get("claimRoot"):
+        print(f"  • Merkle Claims  : {cert.get('claimRoot')}")
+    if sig_note:
+        print(f"  • Ed25519 Check  : {sig_note}")
+    print(f"  • Public Cert    : {cert.get('certificateUrl')}")
+    print(f"  • Live Badge     : {cert.get('badgeUrl')}\n")
+    sys.exit(0 if is_certified else 1)
+
+
+if __name__ == "__main__":
     main()

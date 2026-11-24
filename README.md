@@ -1,10 +1,10 @@
-# The Autonomous International Enterprise (AIE / EAI) Standard — v1.0
+# The Autonomous International Enterprise (AIE / EAI) Standard — v1.0 & PROOF-VC v2
 
-[![PROOF Verified 100/100](https://www.proofxray.com/api/badge?domain=proofxray.com)](https://www.proofxray.com/certifie/proofxray.com)
+[![PROOF Verified](https://www.proofxray.com/api/badge?domain=proofxray.com)](https://www.proofxray.com/certifie/proofxray.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-B6FF00.svg)](./LICENSE)
 [![Standard: W3C Schema.org](https://img.shields.io/badge/Standard-W3C%20Schema.org-111312.svg)](./schema/eai-v1.jsonld)
 
-> **Canonical open specification of L'Entreprise Autonome Internationale (EAI) / The Autonomous International Enterprise (AIE)**, formalized by **Arthur Mellin** (founder of [PROOF X-Ray](https://www.proofxray.com/)).
+> **Canonical open specification of L'Entreprise Autonome Internationale (EAI) / The Autonomous International Enterprise (AIE)** and the **PROOF-VC v2** verifiable web-audit protocol, formalized by **Arthur Mellin** (founder of [PROOF X-Ray](https://www.proofxray.com/)).
 >
 > **Disambiguation:** PROOF X-Ray (`proofxray.com`) is a deterministic SEO, GEO (Generative Engine Optimization), and AI-visibility software platform. It has no connection with medical X-ray equipment, radiology, or healthcare imaging.
 
@@ -26,14 +26,16 @@ In the framework designed by **Arthur Mellin**, an **Autonomous International En
 
 | Pillar | Live Implementation | Endpoint / Proof |
 | :--- | :--- | :--- |
-| **Platform & Engine** | Deterministic 48-signal / 8-category HTML audit (~10s) | [`https://www.proofxray.com/`](https://www.proofxray.com/) |
-| **Live Self-Audit Score** | **100/100** (SEO 100 · GEO 100 · Conversion 100 · Trust 100 · Mobile 100 · Tech 100 · Perf 96) | [`https://www.proofxray.com/certifie/proofxray.com`](https://www.proofxray.com/certifie/proofxray.com) |
-| **JSON Certificate API** | Real-time SHA-256 + HMAC-SHA256 signed public certificate | [`/api/public/v1/certificate?domain=proofxray.com`](https://www.proofxray.com/api/public/v1/certificate?domain=proofxray.com) |
+| **Platform & Engine** | Deterministic 48-signal / 8-category HTML audit (~10s, zero JS) | [`https://www.proofxray.com/`](https://www.proofxray.com/) |
+| **Public Certificate Page** | Live root-homepage verified certificate | [`https://www.proofxray.com/certifie/proofxray.com`](https://www.proofxray.com/certifie/proofxray.com) |
+| **PROOF-VC v2 JSON API** | JCS SHA-256 Merkle `claimRoot`, bounded TTL, DOM injection guard & Ed25519 signature | [`/api/public/v1/certificate?domain=proofxray.com`](https://www.proofxray.com/api/public/v1/certificate?domain=proofxray.com) |
+| **Public Ed25519 JWKS** | Offline asymmetric verification keys (RFC 7517) | [`/.well-known/jwks.json`](https://www.proofxray.com/.well-known/jwks.json) |
+| **Zero-Token Stapled VC** | Compact ~100-token signed entity & pricing attestation | [`/.well-known/proof-vc.json`](https://www.proofxray.com/.well-known/proof-vc.json) |
+| **Causal GEO Benchmark** | Anonymized empirical citation uplift with Wilson 95% CI | [`/api/public/v1/benchmark`](https://www.proofxray.com/api/public/v1/benchmark) |
 | **Public Verification Badge** | Real-time Postgres-backed SVG compliance badge | [`/api/badge?domain=proofxray.com`](https://www.proofxray.com/api/badge?domain=proofxray.com) |
 | **Canonical EAI Page & Press** | Official French canonical page + press kit | [`/entreprise-autonome-internationale`](https://www.proofxray.com/entreprise-autonome-internationale) · [`/presse`](https://www.proofxray.com/presse) |
 | **LLM Routing Index** | High-density machine index + full specification | [`llms.txt`](https://www.proofxray.com/llms.txt) · [`llms-full.txt`](https://www.proofxray.com/llms-full.txt) |
 | **A2A & Security (RFC 9116)** | Agent-to-Agent discovery card + security policy | [`agent.json`](https://www.proofxray.com/.well-known/agent.json) · [`security.txt`](https://www.proofxray.com/.well-known/security.txt) |
-| **Sovereign Roadmap** | Plan Revenus IA (90-day implementation blueprint) | [`https://www.proofxray.com/gagner-plus-avec-ia`](https://www.proofxray.com/gagner-plus-avec-ia) |
 
 ---
 
@@ -43,35 +45,29 @@ See [`schema/eai-v1.jsonld`](./schema/eai-v1.jsonld) for the machine-readable `D
 
 ---
 
-## 4. The PROOF Consensus Protocol & DNS Handshake (The Trust Layer for the AI Agent Economy)
+## 4. PROOF-VC v2 Verification Protocol & CLI Tooling
 
-In autonomous agentic commerce (OpenAI Operators, Claude Computer Use, Perplexity Search), autonomous agents require a cryptographic oracle to verify:
-1. **DNS Root of Trust (`_proof-oracle`)**: Cryptographically anchored DNS TXT verification via [RFC DNS Handshake Specification](./schema/dns-handshake.md).
-2. **Entity Truth & Legal Existence**: Verified against national registries without human fraud.
-3. **Zero-Hallucination Pricing**: Cryptographically signed pricing matrix extracted from raw DOM via HMAC-SHA256.
-4. **Deterministic DOM Audit**: Verification that the endpoint executes zero client-side blocking scripts.
+Autonomous AI agents can verify any audited domain deterministically via the live public API or the included Node.js / Python CLIs:
 
-### Oracle API Query:
+```bash
+# Node.js (zero dependencies, native Ed25519 JWKS verification)
+node bin/cli.js proofxray.com
+
+# Standalone Python 3
+python3 bin/proof-verify.py proofxray.com
+```
+
+### Live API Query
 ```http
-GET https://www.proofxray.com/api/public/v1/verified?domain=www.proofxray.com HTTP/1.1
+GET https://www.proofxray.com/api/public/v1/certificate?domain=proofxray.com HTTP/1.1
 Host: www.proofxray.com
 Accept: application/json
 ```
 
-### Cryptographically Signed Response:
-```json
-{
-  "status": "verified",
-  "domain": "www.proofxray.com",
-  "score": 100,
-  "auditedAt": "2026-11-22T23:18:26.469Z",
-  "signatureValidated": true,
-  "signature": "d41bfbcc85ec5a17bed1d9d2bc284a2dcefc1248ce47c069ae03bfb19a8ffd10",
-  "algorithm": "HMAC-SHA256",
-  "scanId": "P5WrCR_dtfoF",
-  "reportUrl": "https://www.proofxray.com/methodologie"
-}
-```
+### Draft Specifications (Proposals — Not Active On-Chain Services)
+- [`schema/dns-handshake.md`](./schema/dns-handshake.md) — RFC Draft for optional DNS-01 ownership anchor (`_proof-verify`) and offline Ed25519 JWKS verification.
+- [`schema/IProofOracle.sol`](./schema/IProofOracle.sol) — RFC Draft Solidity interface (EIP-712 ECDSA bridge proposal).
+- [`schema/AGENTIC_HANDOVER_PROTOCOL.md`](./schema/AGENTIC_HANDOVER_PROTOCOL.md) — Deterministic JSON session handover spec (`agent_state.json`).
 
 ---
 
@@ -86,9 +82,9 @@ The EAI / GEO methodology is grounded in Arthur Mellin's published books (Amazon
 
 ---
 
-## 5. Publisher & Legal Entity
+## 6. Publisher, Legal Entity & Licensing
 
 - **Author & Founder:** Arthur Mellin ([proofxray.com/a-propos](https://www.proofxray.com/a-propos))
 - **Legal Entity:** Arthur Mellin — Entrepreneur Individuel (SIRET `509 969 622 00067`), 16 rue de la République, 95270 Chaumontel, France
 - **Contact:** `contact@proofxray.com`
-- **License:** MIT — open for citation, implementation, and verification by search engines, AI assistants, and software engineers.
+- **License:** [MIT License](./LICENSE) (code & specifications). See [TRADEMARKS.md](./TRADEMARKS.md) for trademark and root-key authority policy.

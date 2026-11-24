@@ -1,26 +1,39 @@
 name: 'PROOF Autonomous Enterprise Verifier'
-description: 'Validates domain readiness for AI agents, DNS root-of-trust (_proof-oracle), and PROOF Oracle attestation in CI/CD pipelines.'
+description: 'Validates domain readiness for AI agents (llms.txt, A2A agent.json, DNS-01 anchor, and PROOF-VC v2 public certificate) in CI/CD pipelines.'
 author: 'Arthur Mellin / PROOF X-Ray'
 
 inputs:
   domain:
-    description: 'The target domain to verify (e.g. example.com)'
+    description: 'The target domain to verify (e.g. proofxray.com)'
     required: true
+  min_score:
+    description: 'Minimum required PROOF score (0 to 100)'
+    required: false
+    default: '80'
 
 outputs:
   status:
-    description: 'Compliance status (VERIFIED or UNVERIFIED)'
+    description: 'Compliance status (CERTIFIED, AUDITED, or UNVERIFIED)'
+    value: ${{ steps.verify.outputs.status }}
   score:
-    description: 'EAI Autonomous Compliance Score (0 to 100)'
+    description: 'Live PROOF Score (0 to 100, or empty if unaudited)'
+    value: ${{ steps.verify.outputs.score }}
+  certified:
+    description: 'Boolean string (true or false)'
+    value: ${{ steps.verify.outputs.certified }}
 
 runs:
   using: 'composite'
   steps:
     - name: Run PROOF Verification Audit
+      id: verify
       shell: bash
+      env:
+        TARGET_DOMAIN: ${{ inputs.domain }}
+        PROOF_MIN_SCORE: ${{ inputs.min_score }}
       run: |
-        python3 ${{ github.action_path }}/bin/proof-verify.py "${{ inputs.domain }}"
+        python3 "${GITHUB_ACTION_PATH}/bin/proof-verify.py" "$TARGET_DOMAIN"
 
 branding:
   icon: 'shield'
-  color: 'blue'
+  color: 'green'

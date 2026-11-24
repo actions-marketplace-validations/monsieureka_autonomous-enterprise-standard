@@ -1,31 +1,37 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "name": "PROOF X-Ray Autonomous Consensus Oracle",
-  "version": "1.0.0",
-  "description": "Cryptographic authority and deterministic registry validating legal entities, zero-hallucination pricing, and autonomous enterprise compliance for AI agent frameworks.",
+  "name": "PROOF X-Ray — Autonomous International Enterprise (EAI) Standard",
+  "version": "2.0.0",
+  "protocol": "proof-vc-v2",
+  "description": "Open specification, offline-verifiable Ed25519 public certificate API (PROOF-VC v2), and deterministic SEO/GEO verification tooling for AI agents.",
   "url": "https://www.proofxray.com",
   "authority": {
-    "organization": "PROOF X-Ray",
+    "organization": "PROOF X-Ray (Arthur Mellin EI — SIRET 509 969 622 00067)",
     "founder": "Arthur Mellin",
     "country": "FR",
-    "protocol": "Autonomous International Enterprise (EAI) v1.0",
+    "protocol": "Autonomous International Enterprise (EAI) v1.0 / PROOF-VC v2",
     "specification": "https://github.com/monsieureka/autonomous-enterprise-standard"
   },
   "endpoints": {
-    "verification_oracle": {
-      "url": "https://www.proofxray.com/api/public/v1/verified",
+    "public_certificate": {
+      "url": "https://www.proofxray.com/api/public/v1/certificate",
       "method": "GET",
       "parameters": {
         "domain": {
           "type": "string",
-          "description": "The target domain to verify (e.g. example.com)"
+          "description": "Target domain to inspect (e.g. proofxray.com)"
         }
       },
-      "signature": "HMAC-SHA256",
+      "signature": "Ed25519 (JCS RFC 8785) + SHA-256 Merkle claimRoot",
+      "jwks": "https://www.proofxray.com/.well-known/jwks.json",
       "response_format": "application/json"
     },
+    "jwks": {
+      "url": "https://www.proofxray.com/.well-known/jwks.json",
+      "method": "GET",
+      "format": "application/json"
+    },
     "dynamic_badge": {
-      "url": "https://www.proofxray.com/api/badge",
+      "url": "https://www.proofxray.com/api/badge?domain=proofxray.com",
       "method": "GET",
       "output": "image/svg+xml"
     },
@@ -35,20 +41,9 @@
       "format": "text/markdown"
     }
   },
-  "dns_handshake": {
-    "txt_record_prefix": "_proof-oracle",
+  "dns_ownership_draft": {
+    "status": "RFC Draft",
+    "txt_record_prefix": "_proof-verify",
     "specification": "https://github.com/monsieureka/autonomous-enterprise-standard/blob/main/schema/dns-handshake.md"
-  },
-  "supported_frameworks": [
-    "LangChain",
-    "CrewAI",
-    "AutoGen",
-    "OpenAI Operator / Swarm",
-    "Claude Computer Use"
-  ],
-  "monetization": {
-    "oracle_queries": "Free tier (100 req/mo), Metred billing thereafter",
-    "trust_attestation": "SaaS / Certified Merchant root registry subscription",
-    "agentic_commissions": "Cryptographic proof-of-transaction revenue sharing"
   }
 }

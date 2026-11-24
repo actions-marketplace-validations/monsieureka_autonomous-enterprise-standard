@@ -1,55 +1,45 @@
-# The Agentic Web Manifest: The PROOF Standard for Autonomous AI Agents
+# The Agentic Web Manifesto: The PROOF-VC v2 Standard for Verifiable AI Discovery
 
-> **"Unverified agents hallucinate. Verified agents transact."**
+> **"Unverified agents hallucinate. Verified agents inspect deterministic proofs."**
 
-We are witnessing the birth of the Agentic Economy. Autonomous AI agents are no longer just answering questions—they are comparing vendors, verifying compliance, checking inventories, and executing real-world purchases.
-
-Yet, today's web is built on human assumptions: fragile HTML, unverified price tags, and anonymous domains. When an agent acts on unverified data, businesses lose money and agents hallucinate transactions.
-
-**This ends today.**
+Autonomous AI agents are shifting from answering questions to comparing businesses, validating compliance, and routing real-world transactions. Yet today's web HTML is noisy, self-asserted, and vulnerable to indirect prompt injection and cloaking.
 
 ---
 
-## 1. The Autonomous Enterprise Standard (EAI)
+## 1. The Autonomous Enterprise Standard (EAI v1.0) & PROOF-VC v2
 
-The **Entreprise Autonome Internationale (EAI)** standard provides the first cryptographically verifiable trust layer for autonomous agents. 
-
-Every compliant digital entity must provide:
-1. **RFC 9116 Security Transparency** (`/.well-known/security.txt`).
-2. **Machine-Readable Semantic Registry** (`/llms.txt`, `/.well-known/agent.json`).
-3. **Cryptographic Consensus Oracle**: Live, tamper-proof verification signed via HMAC-SHA256.
+Every compliant digital entity exposes:
+1. **Security Transparency** (`/.well-known/security.txt`, RFC 9116).
+2. **Machine-Readable Routing & Capabilities** (`/llms.txt`, `/.well-known/agent.json`, Schema.org JSON-LD).
+3. **Offline-Verifiable Public Attestation (PROOF-VC v2)**: deterministic root-homepage audit (`/api/public/v1/certificate?domain=...`) with a SHA-256 Merkle root over extracted entity facts (`claimRoot`), DOM prompt-injection check (`injectionFree`), bounded expiration (`expiresAt`), and asymmetric **Ed25519** signature verifiable offline against `https://www.proofxray.com/.well-known/jwks.json`.
 
 ---
 
-## 2. Universal Agent Verification in 1 Line of Code
+## 2. Deterministic Verification in CLI or Python (Zero Magic)
 
-We have released open-source integration tools for **LangChain** and **CrewAI**. Any autonomous worker can instantly verify a merchant's legal entity and pricing before taking action:
+```bash
+git clone https://github.com/monsieureka/autonomous-enterprise-standard.git
+cd autonomous-enterprise-standard
+
+# Instant verification via Node.js (verifies Ed25519 offline via JWKS) or Python 3
+node bin/cli.js proofxray.com
+python3 bin/proof-verify.py proofxray.com
+```
+
+Or import the included local LangChain / CrewAI tool directly from this repository:
 
 ```python
-from langchain_community.tools import ProofVerifyTool
+from integrations.langchain.proof_tool import ProofVerifyTool
 
-# Cryptographically verify merchant domain & pricing
-oracle = ProofVerifyTool()
-verification = oracle.run("www.proofxray.com")
-
-print(verification["status"])       # VERIFIED
-print(verification["legalEntity"])  # Arthur Mellin (EI)
-print(verification["pricing"])      # Certified Live Catalog
+result = ProofVerifyTool().run("proofxray.com")
+print(result["status"], result["score"], result["claimRoot"])
 ```
 
 ---
 
-## 3. The PROOF Verified Seal
+## 3. Join & Inspect the Standard
 
-Websites adhering to the EAI standard display the dynamic PROOF badge. Each badge serves as an on-chain semantic beacon containing embedded RDF/Dublin Core metadata, allowing crawlers from OpenAI, Anthropic, and Google to immediately validate domain authenticity.
-
----
-
-## 4. Join the Standard
-
-The specification is public, decentralized, and open source:
-- **Specification Repository**: [GitHub - autonomous-enterprise-standard](https://github.com/monsieureka/autonomous-enterprise-standard)
-- **Live Canonical Verification**: [https://www.proofxray.com/entreprise-autonome-internationale](https://www.proofxray.com/entreprise-autonome-internationale)
-- **API Oracle**: `GET https://www.proofxray.com/api/public/v1/verified?domain=yourdomain.com`
-
-**The era of unverified commerce is over. Build autonomous. Verify with PROOF.**
+- **Open-Source Specification (MIT):** https://github.com/monsieureka/autonomous-enterprise-standard
+- **Live Canonical Page:** https://www.proofxray.com/entreprise-autonome-internationale
+- **Live Certificate API:** `GET https://www.proofxray.com/api/public/v1/certificate?domain=proofxray.com`
+- **Public Ed25519 JWKS:** `GET https://www.proofxray.com/.well-known/jwks.json`

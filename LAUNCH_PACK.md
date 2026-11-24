@@ -1,102 +1,63 @@
-# 🚀 Kit de Lancement Clé en Main : Manifeste PROOF (Product Hunt, Hacker News, X / Twitter, LinkedIn)
+# Kit de Lancement Vérifié : PROOF X-Ray & Standard EAI / PROOF-VC v2
 
-Voici les 4 posts rédigés, formatés et prêts à être copiés-collés en un clic dès demain matin pour propulser votre manifeste mondialement.
-
----
-
-## 1. Thread X / Twitter (Le format viral pour les builders IA)
-
-### Tweet 1 (Hook) :
-> Unverified AI agents hallucinate. Verified agents transact.
-> 
-> Today, we're making the Entreprise Autonome Internationale (EAI) standard public: the first cryptographic trust & verification layer for autonomous AI agents.
-> 
-> 🧵 Here is why this changes the web forever 👇
-
-### Tweet 2 :
-> The current web was designed for human eyeballs.
-> 
-> When an autonomous agent (AutoGPT, CrewAI, LangChain) tries to buy a product or verify a merchant, it relies on fragile HTML scraping.
-> 
-> Result: hallucinations, incorrect pricing, and high-risk transactions.
-
-### Tweet 3 :
-> The PROOF Consensus Protocol fixes this with:
-> 1. RFC 9116 (`security.txt`)
-> 2. Machine-readable registries (`llms.txt` + `agent.json`)
-> 3. An open HMAC-SHA256 oracle for tamper-proof domain & price certification.
-
-### Tweet 4 :
-> Any agent can now cryptographically verify a merchant in 1 line of Python:
-> 
-> `from langchain_community.tools import ProofVerifyTool`
-> `verification = ProofVerifyTool().run("www.proofxray.com")`
-> 
-> Open-source spec & GitHub:
-> 👉 https://github.com/monsieureka/autonomous-enterprise-standard
-
-### Tweet 5 :
-> Read the full Agentic Web Manifesto & test the live consensus oracle:
-> 🌐 https://www.proofxray.com/entreprise-autonome-internationale
-> 
-> The era of unverified commerce is over. Welcome to the autonomous economy. 🚀
+> **Règle de vérité stricte :** Tous les liens, endpoints et snippets ci-dessous correspondent à du code réellement déployé et testable en direct (zéro import fictif, zéro 404).
 
 ---
 
-## 2. Post Hacker News (Show HN)
+## 1. Show HN (Hacker News)
 
-**Title :** 
-`Show HN: PROOF – Open HMAC-SHA256 verification oracle for autonomous AI agents`
+**Title:**
+`Show HN: PROOF-VC v2 – Deterministic 48-signal HTML/GEO audit & Ed25519 certificate spec for AI agents`
 
-**URL / Text :**
+**Text:**
 > Hi HN,
-> 
-> We just open-sourced the specification and tooling for the **Entreprise Autonome Internationale (EAI)** standard:
+>
+> I built **PROOF X-Ray** (`https://www.proofxray.com`) to audit how websites are actually read by search engines and AI crawlers (raw HTML without JS execution, 48 deterministic signals, zero LLM hallucination — unmeasured items are explicitly marked "unmeasured").
+>
+> Today I'm open-sourcing the **EAI v1.0 / PROOF-VC v2** spec and zero-dependency CLI verifiers (Node.js & Python 3) under MIT:
 > https://github.com/monsieureka/autonomous-enterprise-standard
-> 
-> Most autonomous agents scraping commercial websites suffer from hallucinations regarding legal entity validation and live pricing. 
-> 
-> We built a lightweight cryptographic verification oracle (`/api/public/v1/verified`) that signs pricing catalogs and corporate credentials via HMAC-SHA256, alongside RFC 9116 and `llms.txt` schemas.
-> 
-> Integrations for LangChain and CrewAI are included. Would love your feedback on the spec and consensus mechanism!
+>
+> What is actually live right now:
+> - Free 10-second raw-HTML audit (international: FR/EN/DE/ES, multi-currency, E.164 phones) + DOM prompt-injection & Unicode steganography guard
+> - Public multi-domain certificate JSON API: `GET https://www.proofxray.com/api/public/v1/certificate?domain=proofxray.com`
+> - Deterministic SHA-256 Merkle root over extracted entity facts (`claimRoot`), bounded expiration (`expiresAt`), and asymmetric **Ed25519** signatures verifiable offline via `https://www.proofxray.com/.well-known/jwks.json`
+> - Root-homepage anti-poisoning guard (subpage scans cannot overwrite a domain's certificate)
+>
+> Try it locally with zero deps:
+> `git clone https://github.com/monsieureka/autonomous-enterprise-standard && node autonomous-enterprise-standard/bin/cli.js proofxray.com`
+>
+> Would love brutal technical feedback on the scoring invariants, prompt-injection DOM guard, and Ed25519 attestation schema!
 
 ---
 
-## 3. Product Hunt (Launch Copy)
+## 2. Thread X / Twitter
 
-**Tagline :** 
-The cryptographic trust layer for autonomous AI agents
+### Tweet 1
+> AI agents reading raw web HTML face two silent failure modes:
+> 1. Blindly trusting self-asserted `llms.txt` / JSON-LD
+> 2. Indirect prompt injection hidden in DOM / Unicode tags
+>
+> Today we're open-sourcing **PROOF-VC v2** (MIT): deterministic HTML/GEO audits with Merkle `claimRoot`, DOM injection guard & offline-verifiable Ed25519 certificates (`/.well-known/jwks.json`).
 
-**Short Description :**
-Unverified agents hallucinate. Verified agents transact. PROOF is the first open standard and HMAC-SHA256 oracle providing instant domain, entity, and pricing verification for AI agent frameworks.
-
-**Maker First Comment :**
-> Hey Product Hunt community! 👋
-> 
-> Autonomous agents are shifting from chat interfaces to real-world economic actors. But how does an agent know if a merchant is legitimate or if a price tag hasn’t been manipulated?
-> 
-> Today we're launching the PROOF Standard & Oracle:
-> - 🔐 Cryptographic HMAC-SHA256 verification
-> - 📄 Standardized `llms.txt` & `agent.json` discovery
-> - ⚡ Plug-and-play LangChain & CrewAI connectors
-> 
-> Try the live oracle on https://www.proofxray.com/entreprise-autonome-internationale and let us know what you think!
+### Tweet 2
+> Every audited root homepage gets:
+> - Live public certificate page (`/certifie/<domain>`)
+> - JSON attestation API (`/api/public/v1/certificate?domain=...`)
+> - Dynamic SVG badge (`/api/badge?domain=...`)
+> - Zero-dep Node & Python CLI verifiers
+>
+> Repo (MIT): https://github.com/monsieureka/autonomous-enterprise-standard
 
 ---
 
-## 4. Post LinkedIn (Autorité & B2B)
+## 3. Post LinkedIn (B2B & Presse)
 
-> L’économie des agents autonomes vient de franchir un cap historique.
-> 
-> Jusqu’à présent, lorsqu'un agent IA navigue sur le web pour comparer des prix ou exécuter une transaction, il fait face à des données non certifiées et à des risques d'hallucinations critiques.
-> 
-> Pour résoudre définitivement ce problème, nous publions aujourd'hui le standard international de l'**Entreprise Autonome Internationale (EAI)** et l'oracle cryptographique **PROOF** :
-> 
-> ✅ Signature HMAC-SHA256 des catalogues de prix et des entités légales.
-> ✅ Indexation native pour les moteurs de réponse (LLMs.txt, RFC 9116).
-> ✅ Connecteurs open source prêts à l'emploi pour LangChain et CrewAI.
-> 
-> Le manifeste complet et le dépôt de référence sont désormais publics :
-> 🔗 https://github.com/monsieureka/autonomous-enterprise-standard
-> 
-> « Les agents non vérifiés hallucinent. Les agents vérifiés transigent. »
+> Les moteurs de réponse IA (ChatGPT Search, Perplexity, Claude, Gemini) lisent le HTML brut de votre site, sans exécuter JavaScript.
+>
+> Nous publions aujourd'hui en open-source (licence MIT) la spécification **EAI v1.0 / PROOF-VC v2** et ses outils CLI de vérification :
+> - Audit déterministe en ~10 secondes sur 48 signaux SEO & GEO (ce qui n'est pas mesuré reste indiqué « non mesuré ») ;
+> - Pare-feu déterministe anti-injection de prompt et anti-stéganographie DOM ;
+> - Certificat public `/certifie/<domaine>` + racine Merkle des faits d'entité + signature asymétrique Ed25519 vérifiable hors-ligne via `/.well-known/jwks.json`.
+>
+> Dépôt open-source : https://github.com/monsieureka/autonomous-enterprise-standard
+> Diagnostic gratuit (10 s, sans inscription) : https://www.proofxray.com/
