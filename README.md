@@ -1,12 +1,76 @@
-# The Autonomous International Enterprise (AIE / EAI) Standard — v1.0 & PROOF-VC v2
+# PROOF-VC v2 — verify a website audit without trusting the vendor
 
 [![PROOF Verified](https://www.proofxray.com/api/badge?domain=proofxray.com)](https://www.proofxray.com/certifie/proofxray.com)
+[![npm](https://img.shields.io/npm/v/proof-verify)](https://www.npmjs.com/package/proof-verify)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.monsieureka%2Fproof--verify-111312)](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.monsieureka/proof-verify)
 [![License: MIT](https://img.shields.io/badge/License-MIT-B6FF00.svg)](./LICENSE)
-[![Standard: W3C Schema.org](https://img.shields.io/badge/Standard-W3C%20Schema.org-111312.svg)](./schema/eai-v1.jsonld)
 
-> **Canonical open specification of L'Entreprise Autonome Internationale (EAI) / The Autonomous International Enterprise (AIE)** and the **PROOF-VC v2** verifiable web-audit protocol, formalized by **Arthur Mellin** (founder of [PROOF X-Ray](https://www.proofxray.com/)).
->
-> **Disambiguation:** PROOF X-Ray (`proofxray.com`) is a deterministic SEO, GEO (Generative Engine Optimization), and AI-visibility software platform. It has no connection with medical X-ray equipment, radiology, or healthcare imaging.
+A zero-dependency verifier (Node and Python) and a stdio MCP server for **Ed25519-signed website-audit certificates** issued by [PROOF X-Ray](https://www.proofxray.com). It also hosts the open EAI / AIE specification (section 1 below).
+
+**Disambiguation:** PROOF X-Ray (`proofxray.com`) is deterministic SEO, GEO (Generative Engine Optimization) and AI-visibility software. It has no connection with medical X-ray equipment, radiology or healthcare imaging.
+
+## Verify in 2 seconds
+
+```bash
+npx proof-verify proofxray.com
+```
+
+Real output (captured 2026-11-24; the score and dates change with each audit; the three informational checks for DNS-01, `llms.txt` and `agent.json` are omitted here):
+
+```text
+[PROOF-VC v2] Verifying domain: proofxray.com
+• Querying PROOF Public Certificate API (online)... ✔ 200 OK
+  • Status         : CERTIFIED
+  • Domain         : proofxray.com
+  • PROOF Score    : 93/100 (certified: yes, min required: 80)
+  • Audited At     : 2026-11-24T16:12:49.463Z
+  • Expires At     : 2026-12-01T16:12:49.463Z (snapshot)
+  • Merkle Claims  : 0a333c49a9aaf1d1a9d682477f085f60ef19a0c790c9b833fb1f81694e3cb82a
+  • Ed25519        : VALID — signature verified against pinned key proof-root-2026-11-24; certificate fetched online
+```
+
+A domain that has not been audited exits with code `1` and a link to the free audit. A certificate without a valid signature from the pinned key also exits `1` (fail closed).
+
+Prefer Python with no npm? `git clone` this repo, then `python3 bin/proof-verify.py proofxray.com` (pure-Python RFC 8032 Ed25519 fallback, no dependency).
+
+## Use it from an AI client (MCP) in 10 seconds
+
+Published in the official MCP Registry as `io.github.monsieureka/proof-verify`. Run command: `npx -y -p proof-verify proof-mcp`. Tools: `verify_domain_proof`, `get_transparency_log`, `get_causal_geo_benchmark` (experimental, no measured sample yet).
+
+**Claude Desktop** — add to `claude_desktop_config.json`, then restart the app:
+```json
+{
+  "mcpServers": {
+    "proof-verify": { "command": "npx", "args": ["-y", "-p", "proof-verify", "proof-mcp"] }
+  }
+}
+```
+**Claude Code:**
+```bash
+claude mcp add proof-verify -- npx -y -p proof-verify proof-mcp
+```
+**Cursor** — the same JSON in `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global).
+
+The server itself was tested through a stdio `initialize` and `tools/list` handshake from the published package. The client configuration snippets follow each client's documented `mcpServers` format and were not run inside the clients themselves.
+
+## Use it in CI in 10 seconds
+
+```yaml
+- uses: monsieureka/autonomous-enterprise-standard@v1.0.1
+  with:
+    domain: example.com
+    min_score: '80'
+```
+The step fails unless the domain's certificate has a valid pinned-key Ed25519 signature, is not expired, is certified and reaches `min_score`. It needs `python3` on the runner (present on GitHub-hosted Ubuntu runners).
+
+## Security model & current limits
+
+- **Single issuer today.** PROOF is the only signer. A certificate means "engine version X observed these signals on this public homepage at time T", signed by us. It is not a third-party attestation. The engine output, the Merkle root over the extracted facts (leaves are published, so you can recompute it) and both verifiers are public so that anyone can check a certificate or catch us out.
+- **Offline-checkable signature, online fetch.** The certificate JSON is fetched over HTTPS; the signature is checked locally against a key pinned in the verifier. Rotating the key requires a new release of this package.
+- **The transparency endpoint is a signed snapshot,** recomputed on request: no inclusion or consistency proofs, not an append-only log. It lists only certificates whose badge is still valid.
+- **No ownership proof by default.** The DNS-01 anchor is optional and informational.
+- **No promise about rankings or AI answers.** The score measures observable signals in public HTML. It is not a search ranking, a probability of being cited, or a revenue forecast.
+- **Public by design.** A domain's certificate page shows its score, audit date and homepage findings. Ask `contact@proofxray.com` to have a page taken down.
 
 ---
 
@@ -80,29 +144,8 @@ python3 -m unittest discover -s test -p "test_*.py" -v   # Python only
 
 The tests generate a throwaway Ed25519 key and a signed fixture certificate; they cover valid, tampered, missing-attestation, unknown-kid and wrong-key cases. See also [`ci/README.md`](./ci/README.md).
 
-### Zero-Dependency MCP Server (Claude Code, Claude Desktop, Cursor, Antigravity)
-Connect PROOF-VC v2 directly to any MCP client with **zero `npm install`**:
-```json
-{
-  "mcpServers": {
-    "proof-xray": {
-      "command": "node",
-      "args": ["/path/to/autonomous-enterprise-standard/mcp/server.js"]
-    }
-  }
-}
-```
-Exposes `verify_domain_proof`, `get_transparency_log` (the snapshot signature is checked against the pinned key; entries are returned only if it is valid), and `get_causal_geo_benchmark`.
-
-### GitHub Action
-
-```yaml
-- uses: monsieureka/autonomous-enterprise-standard@v1.0.0
-  with:
-    domain: example.com
-    min_score: '80'
-```
-The step fails unless the domain's certificate has a valid pinned-key Ed25519 signature, is not expired, is certified and reaches `min_score`. It needs `python3` on the runner (present on GitHub-hosted Ubuntu runners; not tested here).
+### MCP server and CI
+See the quick-start sections at the top of this file (Claude Desktop, Claude Code, Cursor; GitHub Action).
 
 ### Live API Query
 ```http
