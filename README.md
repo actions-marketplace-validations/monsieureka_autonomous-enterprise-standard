@@ -30,6 +30,7 @@ In the framework designed by **Arthur Mellin**, an **Autonomous International En
 | **Public Certificate Page** | Live root-homepage verified certificate | [`https://www.proofxray.com/certifie/proofxray.com`](https://www.proofxray.com/certifie/proofxray.com) |
 | **PROOF-VC v2 JSON API** | JCS SHA-256 Merkle `claimRoot`, bounded TTL, DOM injection guard & Ed25519 signature | [`/api/public/v1/certificate?domain=proofxray.com`](https://www.proofxray.com/api/public/v1/certificate?domain=proofxray.com) |
 | **Public Ed25519 JWKS** | Offline asymmetric verification keys (RFC 7517) | [`/.well-known/jwks.json`](https://www.proofxray.com/.well-known/jwks.json) |
+| **Transparency Log (STH)** | Live Ed25519-signed Merkle Tree Head of certified domains | [`/.well-known/transparency-log.json`](https://www.proofxray.com/.well-known/transparency-log.json) |
 | **Zero-Token Stapled VC** | Compact ~100-token signed entity & pricing attestation | [`/.well-known/proof-vc.json`](https://www.proofxray.com/.well-known/proof-vc.json) |
 | **Causal GEO Benchmark** | Anonymized empirical citation uplift with Wilson 95% CI | [`/api/public/v1/benchmark`](https://www.proofxray.com/api/public/v1/benchmark) |
 | **Public Verification Badge** | Real-time Postgres-backed SVG compliance badge | [`/api/badge?domain=proofxray.com`](https://www.proofxray.com/api/badge?domain=proofxray.com) |
@@ -53,9 +54,23 @@ Autonomous AI agents can verify any audited domain deterministically via the liv
 # Node.js (zero dependencies, native Ed25519 JWKS verification)
 node bin/cli.js proofxray.com
 
-# Standalone Python 3
+# Standalone Python 3 (zero dependencies, pure-Python RFC 8032 Ed25519 verification)
 python3 bin/proof-verify.py proofxray.com
 ```
+
+### Zero-Dependency MCP Server (Claude Code, Claude Desktop, Cursor, Antigravity)
+Connect PROOF-VC v2 directly to any MCP client with **zero `npm install`**:
+```json
+{
+  "mcpServers": {
+    "proof-xray": {
+      "command": "node",
+      "args": ["/path/to/autonomous-enterprise-standard/mcp/server.js"]
+    }
+  }
+}
+```
+Exposes `verify_domain_proof`, `get_transparency_log` (offline Ed25519 STH verification), and `get_causal_geo_benchmark`.
 
 ### Live API Query
 ```http

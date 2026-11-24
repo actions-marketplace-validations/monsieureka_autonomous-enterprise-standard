@@ -1,63 +1,83 @@
 # Kit de Lancement Vérifié : PROOF X-Ray & Standard EAI / PROOF-VC v2
 
-> **Règle de vérité stricte :** Tous les liens, endpoints et snippets ci-dessous correspondent à du code réellement déployé et testable en direct (zéro import fictif, zéro 404).
+> **Règle de vérité stricte :** Tous les liens, endpoints et snippets ci-dessous correspondent à du code réellement déployé et vérifié en direct (4/4 vert, zéro dépendance, zéro 404).
 
 ---
 
-## 1. Show HN (Hacker News)
+## 1. Show HN (Hacker News — format texte brut prêt à coller, sans Markdown cassé)
+
+**Optimal window:** Tuesday–Thursday, 14:30–16:30 Paris time (8:30–10:30 AM US East Coast).
 
 **Title:**
-`Show HN: PROOF-VC v2 – Deterministic 48-signal HTML/GEO audit & Ed25519 certificate spec for AI agents`
+Show HN: PROOF-VC v2 – Offline-verifiable Ed25519 web-audit & anti-cloaking spec for AI agents
 
-**Text:**
-> Hi HN,
->
-> I built **PROOF X-Ray** (`https://www.proofxray.com`) to audit how websites are actually read by search engines and AI crawlers (raw HTML without JS execution, 48 deterministic signals, zero LLM hallucination — unmeasured items are explicitly marked "unmeasured").
->
-> Today I'm open-sourcing the **EAI v1.0 / PROOF-VC v2** spec and zero-dependency CLI verifiers (Node.js & Python 3) under MIT:
-> https://github.com/monsieureka/autonomous-enterprise-standard
->
-> What is actually live right now:
-> - Free 10-second raw-HTML audit (international: FR/EN/DE/ES, multi-currency, E.164 phones) + DOM prompt-injection & Unicode steganography guard
-> - Public multi-domain certificate JSON API: `GET https://www.proofxray.com/api/public/v1/certificate?domain=proofxray.com`
-> - Deterministic SHA-256 Merkle root over extracted entity facts (`claimRoot`), bounded expiration (`expiresAt`), and asymmetric **Ed25519** signatures verifiable offline via `https://www.proofxray.com/.well-known/jwks.json`
-> - Root-homepage anti-poisoning guard (subpage scans cannot overwrite a domain's certificate)
->
-> Try it locally with zero deps:
-> `git clone https://github.com/monsieureka/autonomous-enterprise-standard && node autonomous-enterprise-standard/bin/cli.js proofxray.com`
->
-> Would love brutal technical feedback on the scoring invariants, prompt-injection DOM guard, and Ed25519 attestation schema!
+**Text (plain text for HN — paste directly as-is):**
+Hi HN,
+
+I built PROOF X-Ray (https://www.proofxray.com) to audit how websites are actually read by search engines and AI crawlers (raw HTML without JS execution, 48 deterministic signals, zero LLM hallucination — unmeasured signals are explicitly marked unmeasured).
+
+Today I'm open-sourcing the EAI v1.0 / PROOF-VC v2 specification, zero-dependency CLI verifiers (Node.js and pure-Python RFC 8032 Ed25519), and a zero-dependency MCP server under MIT:
+https://github.com/monsieureka/autonomous-enterprise-standard
+
+What is actually live right now:
+- Free 10-second raw-HTML audit (international FR/EN/DE/ES, multi-currency, E.164 phones) + deterministic DOM prompt-injection & Unicode steganography guard + parallel Dual-View Anti-Cloaking check (bot vs Chrome UA)
+- Public multi-domain certificate API: https://www.proofxray.com/api/public/v1/certificate?domain=proofxray.com
+- Deterministic SHA-256 Merkle root over extracted entity facts (claimRoot), bounded TTL (7d free snapshot vs 30d continuous monitoring), DNS-01 ownership anchor (_proof-verify TXT), and Ed25519 signatures verifiable offline via https://www.proofxray.com/.well-known/jwks.json
+- Live Ed25519-signed Merkle Transparency Log of all certified root domains: https://www.proofxray.com/.well-known/transparency-log.json
+- Anti-spoofing SVG badge with SSL-style 7-day expiry countdown (https://www.proofxray.com/api/badge?domain=proofxray.com)
+
+Try it locally with zero dependencies (Node or Python 3):
+
+  git clone https://github.com/monsieureka/autonomous-enterprise-standard
+  node autonomous-enterprise-standard/bin/cli.js proofxray.com
+  python3 autonomous-enterprise-standard/bin/proof-verify.py proofxray.com
+
+Or connect the zero-dep MCP server directly in Claude Code / Cursor (`node mcp/server.js`).
+
+Would love brutal technical feedback on the scoring invariants, Dual-View anti-cloaking guard, and Ed25519 / Transparency Log schema.
 
 ---
 
-## 2. Thread X / Twitter
+## 2. Hacker News Profile Bio (`about` — texte brut HN)
+
+```text
+Founder of PROOF X-Ray (https://www.proofxray.com) — deterministic 48-signal HTML/GEO audits, Dual-View anti-cloaking & DOM prompt-injection guard, and offline-verifiable Ed25519 certificates (PROOF-VC v2).
+
+Open-source MIT spec, zero-dep Node/Python verifiers & MCP server: https://github.com/monsieureka/autonomous-enterprise-standard
+```
+
+---
+
+## 3. Thread X / Twitter
 
 ### Tweet 1
-> AI agents reading raw web HTML face two silent failure modes:
+> AI agents reading raw web HTML face three silent failure modes:
 > 1. Blindly trusting self-asserted `llms.txt` / JSON-LD
 > 2. Indirect prompt injection hidden in DOM / Unicode tags
+> 3. Bot-vs-human cloaking (fake prices/info shown to AI crawlers)
 >
-> Today we're open-sourcing **PROOF-VC v2** (MIT): deterministic HTML/GEO audits with Merkle `claimRoot`, DOM injection guard & offline-verifiable Ed25519 certificates (`/.well-known/jwks.json`).
+> Today we're open-sourcing **PROOF-VC v2** (MIT): deterministic HTML/GEO audits, Dual-View anti-cloaking, live Ed25519 Merkle Transparency Log & zero-dep CLI/MCP verifiers.
 
 ### Tweet 2
 > Every audited root homepage gets:
 > - Live public certificate page (`/certifie/<domain>`)
-> - JSON attestation API (`/api/public/v1/certificate?domain=...`)
-> - Dynamic SVG badge (`/api/badge?domain=...`)
-> - Zero-dep Node & Python CLI verifiers
+> - Offline-verifiable Ed25519 attestation (`/.well-known/jwks.json`)
+> - Live signed Merkle Transparency Log (`/.well-known/transparency-log.json`)
+> - Anti-spoofing SVG badge (`/api/badge?domain=...`)
+> - Zero-dep Node CLI, pure-Python RFC 8032 verifier & MCP server
 >
-> Repo (MIT): https://github.com/monsieureka/autonomous-enterprise-standard
+> MIT repo: https://github.com/monsieureka/autonomous-enterprise-standard
 
 ---
 
-## 3. Post LinkedIn (B2B & Presse)
+## 4. Post LinkedIn (B2B & Presse)
 
 > Les moteurs de réponse IA (ChatGPT Search, Perplexity, Claude, Gemini) lisent le HTML brut de votre site, sans exécuter JavaScript.
 >
-> Nous publions aujourd'hui en open-source (licence MIT) la spécification **EAI v1.0 / PROOF-VC v2** et ses outils CLI de vérification :
+> Nous publions aujourd'hui en open-source (licence MIT) le protocole **EAI v1.0 / PROOF-VC v2**, ses vérificateurs CLI (Node + Python pur RFC 8032 sans dépendance) et son serveur **MCP** pour Claude / Cursor :
 > - Audit déterministe en ~10 secondes sur 48 signaux SEO & GEO (ce qui n'est pas mesuré reste indiqué « non mesuré ») ;
-> - Pare-feu déterministe anti-injection de prompt et anti-stéganographie DOM ;
-> - Certificat public `/certifie/<domaine>` + racine Merkle des faits d'entité + signature asymétrique Ed25519 vérifiable hors-ligne via `/.well-known/jwks.json`.
+> - Double pare-feu déterministe anti-injection de prompt DOM, anti-stéganographie Unicode et anti-cloaking Dual-View (robot vs navigateur) ;
+> - Certificat public `/certifie/<domaine>` + racine Merkle des faits d'entité + signature asymétrique Ed25519 vérifiable hors-ligne (`/.well-known/jwks.json`) + Transparency Log signé en direct (`/.well-known/transparency-log.json`).
 >
 > Dépôt open-source : https://github.com/monsieureka/autonomous-enterprise-standard
 > Diagnostic gratuit (10 s, sans inscription) : https://www.proofxray.com/
