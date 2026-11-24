@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 /**
  * proof-xray-mcp: Zero-dependency Model Context Protocol (MCP) stdio server for PROOF-VC v2.
- * Exposes offline-verifiable Ed25519 domain certification, signed Merkle snapshot, and Causal GEO Benchmark
+ * Exposes Ed25519-verified (pinned key) domain certification, signed Merkle snapshot, and Causal GEO Benchmark
  * directly to Claude Desktop, Claude Code, Cursor, and Antigravity — zero npm install required.
  *
  * Copyright (c) 2026 Arthur Mellin / PROOF X-Ray (https://www.proofxray.com) — MIT License
  */
 
-const https = require('node:https');
-const crypto = require('node:crypto');
 const readline = require('node:readline');
+const lib = require('../lib/verify');
 
 const PROTOCOL_VERSION = '2024-11-05';
-const SERVER_INFO = { name: 'proof-xray-mcp', version: '2.0.0' };
+const SERVER_INFO = { name: 'proof-xray-mcp', version: lib.VERSION };
+// Optional INSECURE key-rotation opt-in (see README): `--jwks-url <url>` or env PROOF_JWKS_URL.
+const JWKS_URL = lib.resolveJwksUrl(process.argv.slice(2));
+const VERIFY_OPTS = { jwksUrl: JWKS_URL };
+const KEY_WARNINGS = JWKS_URL ? [lib.UNPINNED_WARNING] : [];
+if (JWKS_URL) process.stderr.write(`${lib.UNPINNED_WARNING}\n`);
 const DOMAIN_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
 function normalizeDomain(raw) {
@@ -28,72 +32,16 @@ function normalizeDomain(raw) {
   return DOMAIN_RE.test(clean) ? clean : null;
 }
 
-function canonicalJson(value) {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  const entries = Object.entries(value)
-    .filter(([, v]) => v !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
-}
-
-function fetchJson(url, accept = 'application/json', redirects = 3) {
-  return new Promise((resolve) => {
-    const req = https.get(
-      url,
-      { headers: { 'User-Agent': 'proof-xray-mcp/2.0.0', Accept: accept }, timeout: 8000 },
-      (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirects > 0) {
-          res.resume();
-          return resolve(fetchJson(new URL(res.headers.location, url).toString(), accept, redirects - 1));
-        }
-        let raw = '';
-        res.on('data', (chunk) => { raw += chunk; });
-        res.on('end', () => {
-          try {
-            resolve({ status: res.statusCode, data: JSON.parse(raw) });
-          } catch {
-            resolve({ status: res.statusCode, data: null });
-          }
-        });
-      },
-    );
-    req.on('timeout', () => { req.destroy(); resolve({ status: 408, data: null }); });
-    req.on('error', () => resolve({ status: 500, data: null }));
-  });
-}
-
-async function verifyEnvelopeOffline(envelope) {
-  if (!envelope || !envelope.signature || envelope.signature.alg !== 'Ed25519') {
-    return { checked: false, valid: false, reason: 'no_ed25519_attestation' };
-  }
-  const expectedDigest = crypto.createHash('sha256').update(canonicalJson(envelope.payload)).digest('hex');
-  if (expectedDigest !== envelope.digest) {
-    return { checked: true, valid: false, reason: 'digest_mismatch' };
-  }
-  const jwksRes = await fetchJson(envelope.signature.jwksUrl || 'https://www.proofxray.com/.well-known/jwks.json');
-  const keys = Array.isArray(jwksRes.data?.keys) ? jwksRes.data.keys : [];
-  const jwk = keys.find((k) => k.kid === envelope.signature.kid) || keys[0];
-  if (!jwk) return { checked: true, valid: false, reason: 'jwks_key_not_found' };
-  try {
-    const pub = crypto.createPublicKey({ key: jwk, format: 'jwk' });
-    const ok = crypto.verify(
-      null,
-      Buffer.from(`proof-vc-v2\n${expectedDigest}`, 'utf8'),
-      pub,
-      Buffer.from(envelope.signature.value, 'base64url'),
-    );
-    return { checked: true, valid: ok, reason: ok ? 'verified_offline' : 'invalid_signature', kid: jwk.kid };
-  } catch (e) {
-    return { checked: true, valid: false, reason: e.message };
-  }
+async function fetchJson(url, accept = 'application/json') {
+  const res = await lib.fetchUrl(url, accept);
+  return { status: res.status, data: res.data && typeof res.data === 'object' ? res.data : null };
 }
 
 const TOOLS = [
   {
     name: 'verify_domain_proof',
     description:
-      'Verify a domain against the live PROOF X-Ray PROOF-VC v2 protocol: fetches the root-homepage certificate, checks DNS-01 _proof-verify TXT ownership anchor, and verifies the Ed25519 signature offline against /.well-known/jwks.json.',
+      'Verify a domain against the PROOF X-Ray PROOF-VC v2 protocol: fetches the root-homepage certificate online and verifies its Ed25519 signature against a pinned public key (fails closed: no valid signature => not certified). Also reports the DNS-01 _proof-verify TXT check (verified / not_verified / not_checked; informational).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -105,7 +53,7 @@ const TOOLS = [
   {
     name: 'get_transparency_log',
     description:
-      'Fetch the PROOF signed Merkle snapshot (/.well-known/transparency-log.json; not an append-only log), verify its Ed25519 signature offline, and optionally look up a specific certified domain.',
+      'Fetch the PROOF signed Merkle snapshot (/.well-known/transparency-log.json; not an append-only log), verify its Ed25519 signature against the pinned public key (entries are returned only if the signature is valid), and optionally look up a specific certified domain.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -125,43 +73,67 @@ async function handleToolCall(name, args = {}) {
   if (name === 'verify_domain_proof') {
     const domain = normalizeDomain(args.domain);
     if (!domain) return { isError: true, data: { error: 'Invalid domain parameter.' } };
-    const [certRes, dohRes] = await Promise.all([
-      fetchJson(`https://www.proofxray.com/api/public/v1/certificate?domain=${encodeURIComponent(domain)}`),
-      fetchJson(`https://cloudflare-dns.com/dns-query?name=_proof-verify.${encodeURIComponent(domain)}&type=TXT`, 'application/dns-json'),
-    ]);
-    const answers = Array.isArray(dohRes.data?.Answer) ? dohRes.data.Answer : [];
-    const dnsAnchored = answers.some((a) => String(a.data || '').includes('proof-v2='));
+    const certRes = await fetchJson(`https://www.proofxray.com/api/public/v1/certificate?domain=${encodeURIComponent(domain)}`);
     if (certRes.status !== 200 || !certRes.data || certRes.data.status !== 'verified') {
       return {
         isError: false,
         data: {
           domain,
           status: 'unverified',
-          dnsAnchored,
+          certified: false,
+          reason: 'no_completed_audit',
+          dns: { status: 'not_checked', detail: 'no certificate to compare against' },
           auditUrl: 'https://www.proofxray.com/#audit-gratuit',
+          ...(KEY_WARNINGS.length ? { warnings: KEY_WARNINGS } : {}),
         },
       };
     }
     const cert = certRes.data;
-    const ed25519 = cert.attestation ? await verifyEnvelopeOffline(cert.attestation) : { checked: false, valid: false };
+    const result = await lib.evaluateCertificate(cert, domain, VERIFY_OPTS);
+    const dns = await lib.checkDnsChallenge(domain, cert.dnsChallenge);
+    const signature = {
+      valid: result.signature.valid,
+      reason: result.signature.reason,
+      ...(result.signature.kid ? { kid: result.signature.kid } : {}),
+      ...(result.signature.keySource ? { keySource: result.signature.keySource } : {}),
+      note: result.signature.valid && result.signature.keySource === 'pinned'
+        ? `signature verified against pinned key ${result.signature.kid}; certificate fetched online`
+        : (result.signature.valid ? 'UNPINNED KEY (insecure)' : lib.SIGNATURE_FAIL),
+    };
+    if (result.status === 'UNVERIFIED') {
+      return {
+        isError: false,
+        data: {
+          domain,
+          status: 'unverified',
+          certified: false,
+          reason: result.reason,
+          ed25519: signature,
+          dns,
+          ...(KEY_WARNINGS.length ? { warnings: KEY_WARNINGS } : {}),
+        },
+      };
+    }
+    const p = result.payload;
     return {
       isError: false,
       data: {
-        domain: cert.domain,
-        status: cert.certified && (!ed25519.checked || ed25519.valid) ? 'certified' : 'audited',
-        certified: Boolean(cert.certified && (!ed25519.checked || ed25519.valid)),
-        score: cert.score,
-        tier: cert.tier,
-        auditedAt: cert.auditedAt,
-        expiresAt: cert.expiresAt,
-        expired: cert.expired,
-        injectionFree: cert.injectionFree,
+        domain: p.domain,
+        status: result.ok ? 'certified' : 'audited',
+        certified: result.ok,
+        score: result.score,
+        tier: p.tier,
+        auditedAt: p.auditedAt,
+        expiresAt: p.expiresAt,
+        injectionFree: p.injectionFree,
         ...(cert.dualViewVerified !== undefined ? { dualViewVerified: cert.dualViewVerified } : {}),
-        dnsAnchored,
-        claimRoot: cert.claimRoot,
-        ed25519Offline: ed25519,
+        dnsAnchored: dns.status === 'verified',
+        dns,
+        claimRoot: p.claimRoot,
+        ed25519: signature,
         certificateUrl: cert.certificateUrl,
         badgeUrl: cert.badgeUrl,
+        ...(KEY_WARNINGS.length ? { warnings: KEY_WARNINGS } : {}),
       },
     };
   }
@@ -172,7 +144,10 @@ async function handleToolCall(name, args = {}) {
       return { isError: true, data: { error: `Transparency log HTTP ${res.status}` } };
     }
     const log = res.data;
-    const sth = log.signedTreeHead ? await verifyEnvelopeOffline(log.signedTreeHead) : { checked: false, valid: false };
+    const sth = await lib.verifyEnvelope(log.signedTreeHead, VERIFY_OPTS);
+    if (!sth.valid) {
+      return { isError: true, data: { error: lib.SIGNATURE_FAIL, reason: sth.reason, ...(KEY_WARNINGS.length ? { warnings: KEY_WARNINGS } : {}) } };
+    }
     const filter = args.domain ? normalizeDomain(args.domain) : null;
     const entry = filter && Array.isArray(log.entries) ? log.entries.find((e) => e.domain === filter) || null : undefined;
     return {
@@ -182,7 +157,8 @@ async function handleToolCall(name, args = {}) {
         date: log.date,
         entryCount: log.entryCount,
         merkleRoot: log.merkleRoot,
-        signedTreeHeadOffline: sth,
+        signedTreeHead: { valid: true, kid: sth.kid, keySource: sth.keySource },
+        ...(KEY_WARNINGS.length ? { warnings: KEY_WARNINGS } : {}),
         ...(filter ? { lookupDomain: filter, entry } : { sampleDomains: (log.entries || []).slice(0, 10).map((e) => ({ domain: e.domain, score: e.score })) }),
       },
     };
