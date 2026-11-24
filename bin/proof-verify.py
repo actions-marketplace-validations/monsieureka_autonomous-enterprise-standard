@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 proof-verify: Standalone Python 3 CLI verifier for the Autonomous International Enterprise (EAI) Standard & PROOF-VC v2.
-Queries live https://www.proofxray.com/api/public/v1/certificate, verifies SHA-256 JCS digest (and Ed25519 offline if
-`cryptography` is installed), and emits GitHub Actions outputs when GITHUB_OUTPUT is set.
+Queries live https://www.proofxray.com/api/public/v1/certificate, verifies SHA-256 JCS digest and offline Ed25519
+signature against /.well-known/jwks.json with zero external dependencies (RFC 8032 pure-Python fallback), and emits
+GitHub Actions outputs when GITHUB_OUTPUT is set.
 Copyright (c) 2026 Arthur Mellin / PROOF X-Ray (https://www.proofxray.com)
 """
 
@@ -63,6 +64,99 @@ def fetch_json(url: str, accept: str = "application/json, text/plain", redirects
         return 500, None
 
 
+# ── Pure-Python RFC 8032 Ed25519 verifier (zero external dependencies) ─────────
+_ED_P = (1 << 255) - 19
+_ED_L = (1 << 252) + 27742317777372353535851937790883648493
+_ED_D = (-121665 * pow(121666, _ED_P - 2, _ED_P)) % _ED_P
+_ED_I = pow(2, (_ED_P - 1) // 4, _ED_P)
+
+
+def _ed_point_add(p1, p2):
+    x1, y1, z1, t1 = p1
+    x2, y2, z2, t2 = p2
+    a = ((y1 - x1) * (y2 - x2)) % _ED_P
+    b = ((y1 + x1) * (y2 + x2)) % _ED_P
+    c = (2 * _ED_D * t1 * t2) % _ED_P
+    d = (2 * z1 * z2) % _ED_P
+    e = (b - a) % _ED_P
+    f = (d - c) % _ED_P
+    g = (d + c) % _ED_P
+    h = (b + a) % _ED_P
+    return ((e * f) % _ED_P, (g * h) % _ED_P, (f * g) % _ED_P, (e * h) % _ED_P)
+
+
+def _ed_point_mul(s: int, pt):
+    acc = (0, 1, 1, 0)
+    addend = pt
+    while s > 0:
+        if s & 1:
+            acc = _ed_point_add(acc, addend)
+        addend = _ed_point_add(addend, addend)
+        s >>= 1
+    return acc
+
+
+def _ed_point_equal(p1, p2) -> bool:
+    x1, y1, z1, _ = p1
+    x2, y2, z2, _ = p2
+    return (x1 * z2 - x2 * z1) % _ED_P == 0 and (y1 * z2 - y2 * z1) % _ED_P == 0
+
+
+def _ed_point_decompress(buf: bytes):
+    if len(buf) != 32:
+        return None
+    y = int.from_bytes(buf, "little") & ((1 << 255) - 1)
+    if y >= _ED_P:
+        return None
+    sign = buf[31] >> 7
+    u = (y * y - 1) % _ED_P
+    v = (_ED_D * y * y + 1) % _ED_P
+    x2 = (u * pow(v, _ED_P - 2, _ED_P)) % _ED_P
+    if x2 == 0:
+        if sign == 1:
+            return None
+        x = 0
+    else:
+        x = pow(x2, (_ED_P + 3) // 8, _ED_P)
+        if (x * x - x2) % _ED_P != 0:
+            x = (x * _ED_I) % _ED_P
+        if (x * x - x2) % _ED_P != 0:
+            return None
+        if (x & 1) != sign:
+            x = _ED_P - x
+    return (x, y, 1, (x * y) % _ED_P)
+
+
+def _ed_base_point():
+    by = (4 * pow(5, _ED_P - 2, _ED_P)) % _ED_P
+    u = (by * by - 1) % _ED_P
+    v = (_ED_D * by * by + 1) % _ED_P
+    x2 = (u * pow(v, _ED_P - 2, _ED_P)) % _ED_P
+    bx = pow(x2, (_ED_P + 3) // 8, _ED_P)
+    if (bx * bx - x2) % _ED_P != 0:
+        bx = (bx * _ED_I) % _ED_P
+    if bx & 1:
+        bx = _ED_P - bx
+    return (bx, by, 1, (bx * by) % _ED_P)
+
+
+_ED_B = _ed_base_point()
+
+
+def ed25519_verify_pure(pub_bytes: bytes, sig_bytes: bytes, msg: bytes) -> bool:
+    if len(pub_bytes) != 32 or len(sig_bytes) != 64:
+        return False
+    a_pt = _ed_point_decompress(pub_bytes)
+    r_pt = _ed_point_decompress(sig_bytes[:32])
+    if a_pt is None or r_pt is None:
+        return False
+    s_int = int.from_bytes(sig_bytes[32:], "little")
+    if s_int >= _ED_L:
+        return False
+    k = int.from_bytes(hashlib.sha512(sig_bytes[:32] + pub_bytes + msg).digest(), "little") % _ED_L
+    return _ed_point_equal(_ed_point_mul(s_int, _ED_B), _ed_point_add(r_pt, _ed_point_mul(k, a_pt)))
+
+
 def verify_attestation_offline(attestation: dict):
     sig = attestation.get("signature") or {}
     if sig.get("alg") != "Ed25519":
@@ -70,10 +164,6 @@ def verify_attestation_offline(attestation: dict):
     expected_digest = hashlib.sha256(canonical_json(attestation.get("payload", {})).encode("utf-8")).hexdigest()
     if expected_digest != attestation.get("digest"):
         return False, "digest_mismatch"
-    try:
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-    except ImportError:
-        return True, "digest_ok_ed25519_lib_not_installed"
 
     jwks_url = sig.get("jwksUrl") or "https://www.proofxray.com/.well-known/jwks.json"
     st, jwks = fetch_json(jwks_url, "application/json")
@@ -85,10 +175,18 @@ def verify_attestation_offline(attestation: dict):
         return False, "jwks_key_not_found"
     x_pad = jwk["x"] + "=" * (-len(jwk["x"]) % 4)
     sig_pad = sig["value"] + "=" * (-len(sig["value"]) % 4)
+    pub_bytes = base64.urlsafe_b64decode(x_pad)
+    sig_bytes = base64.urlsafe_b64decode(sig_pad)
+    message = f"proof-vc-v2\n{expected_digest}".encode("utf-8")
+
     try:
-        pub = Ed25519PublicKey.from_public_bytes(base64.urlsafe_b64decode(x_pad))
-        pub.verify(base64.urlsafe_b64decode(sig_pad), f"proof-vc-v2\n{expected_digest}".encode("utf-8"))
-        return True, "ed25519_verified_offline"
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        Ed25519PublicKey.from_public_bytes(pub_bytes).verify(sig_bytes, message)
+        return True, "VALID (verified offline)"
+    except ImportError:
+        if ed25519_verify_pure(pub_bytes, sig_bytes, message):
+            return True, "VALID (verified offline, pure-python RFC 8032)"
+        return False, "invalid_signature"
     except Exception:
         return False, "invalid_signature"
 
