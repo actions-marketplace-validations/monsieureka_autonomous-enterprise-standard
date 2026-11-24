@@ -22,7 +22,17 @@ import urllib.request
 DOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
 
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
+AUDIT_URL = "https://www.proofxray.com/en#audit-gratuit"
+
+
+def audit_guidance(domain):
+    """What a developer sees when a domain has no certificate yet: one link and one instruction."""
+    return [
+        "Run a free X-Ray audit of your homepage (about 10 s, no sign-up): paste your site in the box at",
+        f"  {AUDIT_URL}",
+        f"Then run again: npx proof-verify {domain}",
+    ]
 
 # Trusted public keys. To trust a new key, add an entry here (and in PINNED_KEYS of lib/verify.js) and ship a
 # new release. Values come from https://www.proofxray.com/.well-known/jwks.json (OKP / Ed25519, base64url `x`).
@@ -399,8 +409,7 @@ def main():
         print(f"✖ HTTP {cert_status}")
         print("─" * 77)
         print(f"STATUS: UNVERIFIED (No completed root-homepage audit found for {raw})")
-        print("Run a free 10-second deterministic X-Ray audit at:")
-        print("  https://www.proofxray.com/#audit-gratuit\n")
+        print("\n".join(audit_guidance(raw)) + "\n")
         write_github_outputs("UNVERIFIED", "", False)
         sys.exit(1)
     print("✔ 200 OK")

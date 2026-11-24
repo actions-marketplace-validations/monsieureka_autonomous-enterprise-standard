@@ -238,5 +238,17 @@ class Cli(unittest.TestCase):
         self.assertIsNotNone(pv.parse_args(["a.com", "--jwks-url"])[2])
 
 
+
+
+class AuditGuidance(unittest.TestCase):
+    def test_guidance_points_to_english_audit_box_and_rerun_command(self):
+        spec = importlib.util.spec_from_file_location("pv", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bin", "proof-verify.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        text = "\n".join(mod.audit_guidance("mon-site.example"))
+        self.assertIn("https://www.proofxray.com/en#audit-gratuit", text)
+        self.assertIn("npx proof-verify mon-site.example", text)
+        self.assertNotIn("proofxray.com/#audit-gratuit", text)
+
 if __name__ == "__main__":
     unittest.main()
