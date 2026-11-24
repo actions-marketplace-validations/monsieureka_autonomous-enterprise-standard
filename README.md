@@ -29,7 +29,7 @@ In the framework designed by **Arthur Mellin**, an **Autonomous International En
 | **Platform & Engine** | Deterministic 48-signal / 8-category HTML audit (~10s, zero JS) | [`https://www.proofxray.com/`](https://www.proofxray.com/) |
 | **Public Certificate Page** | Live root-homepage verified certificate | [`https://www.proofxray.com/certifie/proofxray.com`](https://www.proofxray.com/certifie/proofxray.com) |
 | **PROOF-VC v2 JSON API** | JCS SHA-256 Merkle `claimRoot`, bounded TTL, DOM injection guard & Ed25519 signature | [`/api/public/v1/certificate?domain=proofxray.com`](https://www.proofxray.com/api/public/v1/certificate?domain=proofxray.com) |
-| **Public Ed25519 JWKS** | Offline asymmetric verification keys (RFC 7517) | [`/.well-known/jwks.json`](https://www.proofxray.com/.well-known/jwks.json) |
+| **Public Ed25519 JWKS** | Asymmetric verification keys (RFC 7517); the CLIs ship the current key pinned | [`/.well-known/jwks.json`](https://www.proofxray.com/.well-known/jwks.json) |
 | **Signed Merkle snapshot** | Ed25519-signed Merkle root over listed domains (a signed snapshot, not an append-only log; it may include expired or alerting domains) | [`/.well-known/transparency-log.json`](https://www.proofxray.com/.well-known/transparency-log.json) |
 | **Zero-Token Stapled VC** | Compact ~100-token signed entity & pricing attestation | [`/.well-known/proof-vc.json`](https://www.proofxray.com/.well-known/proof-vc.json) |
 | **GEO Benchmark (experimental)** | Experimental: anonymized benchmark endpoint, no measured sample yet (`sampleSize` 0) | [`/api/public/v1/benchmark`](https://www.proofxray.com/api/public/v1/benchmark) |
@@ -51,12 +51,34 @@ See [`schema/eai-v1.jsonld`](./schema/eai-v1.jsonld) for the machine-readable `D
 Autonomous AI agents can verify any audited domain deterministically via the live public API or the included Node.js / Python CLIs:
 
 ```bash
-# Node.js (zero dependencies, native Ed25519 JWKS verification)
+# Node.js (zero dependencies, native Ed25519)
 node bin/cli.js proofxray.com
 
-# Standalone Python 3 (zero dependencies, pure-Python RFC 8032 Ed25519 verification)
+# Standalone Python 3 (zero dependencies, pure-Python RFC 8032 Ed25519 fallback)
 python3 bin/proof-verify.py proofxray.com
+
+# Or, once published to npm:  npx proof-verify proofxray.com
 ```
+
+### What the verifiers check, and how they fail
+
+The certificate JSON is **fetched online**. Its Ed25519 attestation is then checked against a public key **pinned in the verifier** (matched by `kid`), so that step needs no network. The tools **fail closed**: exit code `1` (and `FAIL: no valid Ed25519 signature`) when the attestation is missing, malformed, has an unknown `kid`, a digest mismatch or an invalid signature. The score, `certified` flag, domain and expiry are read from the **signed payload**; unsigned top-level fields that disagree with it are rejected. Exit `0` only if the signature is valid, the certificate is not expired, `certified` is true and the score reaches `PROOF_MIN_SCORE` (default 80).
+
+- The key URL written inside the attestation (`jwksUrl`) is **never** used. A missing `kid` is a failure (no fallback to "the first key").
+- DNS-01 (`_proof-verify.<domain>`), `llms.txt` and `agent.json` are reported for information and **do not change the exit code**. The DNS check compares the token of the certificate's `dnsChallenge`; it prints `VERIFIED`, `NOT VERIFIED` or `NOT CHECKED` (resolver unreachable, or no usable challenge) and never claims verification it did not perform.
+- Trusted keys live in the `PINNED_KEYS` array of `lib/verify.js` and `bin/proof-verify.py`. Currently: `proof-root-2026-11-24` (same key as the published JWKS at the time of writing).
+
+**Key rotation.** To trust a new key, a maintainer adds `{ kid, x }` to both `PINNED_KEYS` arrays (values from `/.well-known/jwks.json`), bumps the version and publishes a new release. Old and new `kid` can be pinned side by side. Until users upgrade, they can opt in explicitly with `--jwks-url <url>` (or `PROOF_JWKS_URL`) to look up an unknown `kid` in that HTTPS JWKS; this prints a visible `UNPINNED KEY (insecure)` warning and the result is labelled as such. Never enable it in CI by default.
+
+### Tests
+
+```bash
+npm test                                   # node --test  +  python3 -m unittest (no network needed)
+node --test                                # JavaScript only
+python3 -m unittest discover -s test -p "test_*.py" -v   # Python only
+```
+
+The tests generate a throwaway Ed25519 key and a signed fixture certificate; they cover valid, tampered, missing-attestation, unknown-kid and wrong-key cases. See also [`ci/README.md`](./ci/README.md).
 
 ### Zero-Dependency MCP Server (Claude Code, Claude Desktop, Cursor, Antigravity)
 Connect PROOF-VC v2 directly to any MCP client with **zero `npm install`**:
@@ -70,7 +92,17 @@ Connect PROOF-VC v2 directly to any MCP client with **zero `npm install`**:
   }
 }
 ```
-Exposes `verify_domain_proof`, `get_transparency_log` (offline verification of the snapshot signature), and `get_causal_geo_benchmark`.
+Exposes `verify_domain_proof`, `get_transparency_log` (the snapshot signature is checked against the pinned key; entries are returned only if it is valid), and `get_causal_geo_benchmark`.
+
+### GitHub Action
+
+```yaml
+- uses: monsieureka/autonomous-enterprise-standard@v1.0.0
+  with:
+    domain: example.com
+    min_score: '80'
+```
+The step fails unless the domain's certificate has a valid pinned-key Ed25519 signature, is not expired, is certified and reaches `min_score`. It needs `python3` on the runner (present on GitHub-hosted Ubuntu runners; not tested here).
 
 ### Live API Query
 ```http

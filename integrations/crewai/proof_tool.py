@@ -4,9 +4,14 @@ Queries the live PROOF X-Ray public certificate API (/api/public/v1/certificate)
 and checks optional DNS-01 ownership anchoring (_proof-verify TXT).
 """
 
+import os
 import re
+import sys
 import requests
 from crewai.tools import BaseTool
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from _proof_core import evaluate  # noqa: E402
 
 
 def _normalize_domain(domain: str) -> str:
@@ -39,14 +44,18 @@ class ProofVerifyCrewTool(BaseTool):
         try:
             res = requests.get(url, timeout=10)
             if res.status_code == 200:
-                payload = res.json()
-                status = "CERTIFIED" if payload.get("certified") else "AUDITED"
+                # Fail closed: trust comes only from a valid Ed25519 signature by a pinned key (see integrations/_proof_core.py).
+                data = res.json()
+                verdict = evaluate(data, clean_domain)
+                if verdict["status"] == "UNVERIFIED":
+                    return f"UNVERIFIED: {verdict['reason']} for {clean_domain} (signature not accepted)"
+                payload = verdict["payload"]
                 return (
-                    f"PROOF Status: {status} | Score: {payload.get('score')}/100 | "
-                    f"Injection-Free: {payload.get('injectionFree')} | DNS-01: {'ANCHORED' if dns_anchored else 'OPTIONAL'} | "
-                    f"Domain: {payload.get('domain')} | SHA-256: {payload.get('fingerprint')} | "
-                    f"ClaimRoot: {payload.get('claimRoot')} | Expires: {payload.get('expiresAt')} | "
-                    f"Certificate: {payload.get('certificateUrl')}"
+                    f"PROOF Status: {verdict['status']} | Score: {verdict['score']}/100 | "
+                    f"Injection-Free: {data.get('injectionFree')} | DNS-01: {'ANCHORED' if dns_anchored else 'OPTIONAL'} | "
+                    f"Domain: {payload.get('domain')} | SHA-256: {data.get('fingerprint')} | "
+                    f"ClaimRoot: {data.get('claimRoot')} | Expires: {payload.get('expiresAt')} | "
+                    f"Certificate: {data.get('certificateUrl')}"
                 )
             return f"UNVERIFIED: HTTP {res.status_code} for {clean_domain} (run free audit at https://www.proofxray.com/#audit-gratuit)"
         except Exception as exc:

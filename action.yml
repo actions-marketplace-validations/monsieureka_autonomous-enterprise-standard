@@ -1,31 +1,31 @@
 name: 'PROOF Autonomous Enterprise Verifier'
-description: 'Validates domain readiness for AI agents (llms.txt, A2A agent.json, DNS-01 anchor, and PROOF-VC v2 public certificate) in CI/CD pipelines.'
+description: "Verify a domain's PROOF-VC v2 certificate: pinned-key Ed25519 signature, certified flag and score threshold. Fails closed."
 author: 'Arthur Mellin / PROOF X-Ray'
 
 inputs:
   domain:
-    description: 'The target domain to verify (e.g. proofxray.com)'
+    description: 'Domain to verify (e.g. proofxray.com). The step fails if its PROOF-VC v2 certificate has no valid Ed25519 signature (checked against a key pinned in this action), is expired, is not marked certified, or scores below min_score.'
     required: true
   min_score:
-    description: 'Minimum required PROOF score (0 to 100)'
+    description: 'Minimum PROOF score (0 to 100) required for the step to succeed. The score is read from the signed certificate payload.'
     required: false
     default: '80'
 
 outputs:
   status:
-    description: 'Compliance status (CERTIFIED, AUDITED, or UNVERIFIED)'
+    description: 'CERTIFIED (valid signature, certified, score >= min_score), AUDITED (valid signature but not certified or below min_score) or UNVERIFIED (no certificate, no valid signature, expired, or mismatching fields). INVALID for malformed input.'
     value: ${{ steps.verify.outputs.status }}
   score:
-    description: 'Live PROOF Score (0 to 100, or empty if unaudited)'
+    description: 'Score from the signed payload (0 to 100); empty when status is UNVERIFIED or INVALID.'
     value: ${{ steps.verify.outputs.score }}
   certified:
-    description: 'Boolean string (true or false)'
+    description: "'true' only when status is CERTIFIED, otherwise 'false'."
     value: ${{ steps.verify.outputs.certified }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Run PROOF Verification Audit
+    - name: Verify PROOF-VC v2 certificate
       id: verify
       shell: bash
       env:

@@ -2,17 +2,20 @@
 PROOF-VC v2 Public Certificate & Verification Tool for LangChain Agents.
 Queries the live PROOF X-Ray public certificate API (/api/public/v1/certificate),
 checks DNS-01 ownership anchoring (_proof-verify TXT), and validates SHA-256 JCS digests
-(plus offline Ed25519 verification via /.well-known/jwks.json when `cryptography` is installed).
+and verifies the Ed25519 signature against a PINNED public key (fail closed: no valid signature, no trust).
 """
 
-import base64
-import hashlib
 import json
+import os
 import re
+import sys
 from typing import Any, Dict, Optional, Type
 import requests
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from _proof_core import evaluate  # noqa: E402
 
 
 def _normalize_domain(domain: str) -> str:
@@ -51,33 +54,6 @@ class ProofVerifyTool(BaseTool):
             pass
         return None
 
-    def _verify_ed25519(self, attestation: Dict[str, Any]) -> Dict[str, Any]:
-        sig = attestation.get("signature") or {}
-        if sig.get("alg") != "Ed25519":
-            return {"verified": False, "reason": "no_ed25519_attestation"}
-        expected = hashlib.sha256(_canonical_json(attestation.get("payload", {})).encode("utf-8")).hexdigest()
-        if expected != attestation.get("digest"):
-            return {"verified": False, "reason": "digest_mismatch"}
-        try:
-            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-        except ImportError:
-            return {"verified": True, "reason": "digest_ok_install_cryptography_for_ed25519"}
-        jwks_url = sig.get("jwksUrl") or "https://www.proofxray.com/.well-known/jwks.json"
-        jwks_res = requests.get(jwks_url, timeout=5)
-        if jwks_res.status_code != 200:
-            return {"verified": False, "reason": "jwks_unreachable"}
-        keys = jwks_res.json().get("keys", [])
-        jwk = next((k for k in keys if k.get("kid") == sig.get("kid")), keys[0] if keys else None)
-        if not jwk or not jwk.get("x"):
-            return {"verified": False, "reason": "jwks_key_not_found"}
-        x_bytes = base64.urlsafe_b64decode(jwk["x"] + "=" * (-len(jwk["x"]) % 4))
-        sig_bytes = base64.urlsafe_b64decode(sig["value"] + "=" * (-len(sig["value"]) % 4))
-        try:
-            Ed25519PublicKey.from_public_bytes(x_bytes).verify(sig_bytes, f"proof-vc-v2\n{expected}".encode("utf-8"))
-            return {"verified": True, "reason": "ed25519_verified_offline"}
-        except Exception:
-            return {"verified": False, "reason": "invalid_signature"}
-
     def _run(self, domain: str) -> Dict[str, Any]:
         clean_domain = _normalize_domain(domain)
         dns_anchor = self._resolve_dns_anchor(clean_domain)
@@ -86,22 +62,25 @@ class ProofVerifyTool(BaseTool):
             response = requests.get(url, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                sig_check = self._verify_ed25519(data["attestation"]) if isinstance(data.get("attestation"), dict) else None
+                # Fail closed: trust comes only from a valid Ed25519 signature by a pinned key (see integrations/_proof_core.py).
+                verdict = evaluate(data, clean_domain)
+                if verdict["status"] == "UNVERIFIED":
+                    return {"status": "UNVERIFIED", "domain": clean_domain, "reason": verdict["reason"], "ed25519Check": verdict["signature"]}
+                payload = verdict["payload"]
                 return {
-                    "status": "CERTIFIED" if data.get("certified") else "AUDITED",
-                    "domain": data.get("domain"),
-                    "certified": bool(data.get("certified")),
-                    "score": data.get("score"),
+                    "status": verdict["status"],
+                    "domain": payload.get("domain"),
+                    "certified": verdict["ok"],
+                    "score": verdict["score"],
                     "tier": data.get("tier"),
                     "injectionFree": data.get("injectionFree"),
                     "dns_anchored": dns_anchor is not None,
                     "auditedAt": data.get("auditedAt"),
-                    "expiresAt": data.get("expiresAt"),
+                    "expiresAt": payload.get("expiresAt"),
                     "fingerprint": data.get("fingerprint"),
                     "claimRoot": data.get("claimRoot"),
-                    "ed25519Check": sig_check,
+                    "ed25519Check": verdict["signature"],
                     "certificateUrl": data.get("certificateUrl"),
-                    "jwksUrl": data.get("jwksUrl"),
                 }
             return {"status": "UNVERIFIED", "code": response.status_code, "domain": clean_domain}
         except Exception as e:

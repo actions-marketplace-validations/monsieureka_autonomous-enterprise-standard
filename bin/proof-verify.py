@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 proof-verify: Standalone Python 3 CLI verifier for the Autonomous International Enterprise (EAI) Standard & PROOF-VC v2.
-Queries live https://www.proofxray.com/api/public/v1/certificate, verifies SHA-256 JCS digest and offline Ed25519
-signature against /.well-known/jwks.json with zero external dependencies (RFC 8032 pure-Python fallback), and emits
-GitHub Actions outputs when GITHUB_OUTPUT is set.
+Fetches https://www.proofxray.com/api/public/v1/certificate (online), then verifies the SHA-256 JCS digest and the
+Ed25519 signature against a PINNED public key (no network needed for that step) with zero external dependencies
+(RFC 8032 pure-Python fallback). Fails closed: a certificate without a valid signature is never accepted.
+Emits GitHub Actions outputs when GITHUB_OUTPUT is set.
 Copyright (c) 2026 Arthur Mellin / PROOF X-Ray (https://www.proofxray.com)
 """
 
@@ -13,6 +14,7 @@ import json
 import os
 import re
 import sys
+from datetime import datetime, timezone
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -20,11 +22,30 @@ import urllib.request
 DOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
 
 
+VERSION = "1.0.0"
+
+# Trusted public keys. To trust a new key, add an entry here (and in PINNED_KEYS of lib/verify.js) and ship a
+# new release. Values come from https://www.proofxray.com/.well-known/jwks.json (OKP / Ed25519, base64url `x`).
+PINNED_KEYS = [
+    {"kid": "proof-root-2026-11-24", "x": "DVEMQfdW69Z5iQxjWLO3vZTa1bTeYf7SJ6AVsiew4LA"},
+]
+
+SIGNATURE_FAIL = "FAIL: no valid Ed25519 signature"
+UNPINNED_WARNING = (
+    "UNPINNED KEY (insecure): the public key is fetched from the URL you opted into, "
+    "not from the pinned list."
+)
+
+
 def print_help():
     print(
         "\nPROOF X-Ray — Autonomous Enterprise Standard CLI Verifier (EAI v1.0 / PROOF-VC v2)\n"
         "Usage:\n"
-        "  python3 bin/proof-verify.py <domain>\n\n"
+        "  python3 bin/proof-verify.py <domain> [--jwks-url <url>]\n\n"
+        "Options:\n"
+        "  --jwks-url <url>  INSECURE opt-in (key rotation only): look up a key id that is not in the pinned\n"
+        "                    list in this JWKS (env: PROOF_JWKS_URL). Prints an UNPINNED KEY warning.\n"
+        "  PROOF_MIN_SCORE   Minimum score to be reported CERTIFIED (default 80).\n\n"
         "Examples:\n"
         "  python3 bin/proof-verify.py proofxray.com\n"
         "  python3 bin/proof-verify.py example.com\n"
@@ -47,7 +68,7 @@ def write_github_outputs(status: str, score: str, certified: bool):
 
 
 def fetch_json(url: str, accept: str = "application/json, text/plain", redirects: int = 3):
-    req = urllib.request.Request(url, headers={"User-Agent": "proof-verify-cli/2.0.0", "Accept": accept})
+    req = urllib.request.Request(url, headers={"User-Agent": f"proof-verify/{VERSION}", "Accept": accept})
     try:
         with urllib.request.urlopen(req, timeout=8) as res:
             raw = res.read().decode("utf-8", errors="replace")
@@ -157,81 +178,218 @@ def ed25519_verify_pure(pub_bytes: bytes, sig_bytes: bytes, msg: bytes) -> bool:
     return _ed_point_equal(_ed_point_mul(s_int, _ED_B), _ed_point_add(r_pt, _ed_point_mul(k, a_pt)))
 
 
-def verify_attestation_offline(attestation: dict):
-    sig = attestation.get("signature") or {}
-    if sig.get("alg") != "Ed25519":
-        return False, "no_ed25519_attestation"
-    expected_digest = hashlib.sha256(canonical_json(attestation.get("payload", {})).encode("utf-8")).hexdigest()
-    if expected_digest != attestation.get("digest"):
-        return False, "digest_mismatch"
+def _b64url_bytes(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]+={0,2}", value):
+        return None
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
 
-    jwks_url = sig.get("jwksUrl") or "https://www.proofxray.com/.well-known/jwks.json"
-    st, jwks = fetch_json(jwks_url, "application/json")
-    if st != 200 or not isinstance(jwks, dict):
-        return False, "jwks_unreachable"
-    keys = jwks.get("keys") or []
-    jwk = next((k for k in keys if k.get("kid") == sig.get("kid")), keys[0] if keys else None)
-    if not jwk or not jwk.get("x"):
-        return False, "jwks_key_not_found"
-    x_pad = jwk["x"] + "=" * (-len(jwk["x"]) % 4)
-    sig_pad = sig["value"] + "=" * (-len(sig["value"]) % 4)
-    pub_bytes = base64.urlsafe_b64decode(x_pad)
-    sig_bytes = base64.urlsafe_b64decode(sig_pad)
-    message = f"proof-vc-v2\n{expected_digest}".encode("utf-8")
 
+def _resolve_key(kid, pinned_keys, jwks_url, fetch):
+    for k in pinned_keys:
+        if k.get("kid") == kid:
+            return k.get("x"), "pinned", None
+    if not jwks_url:
+        return None, None, "unknown_kid"
+    if not str(jwks_url).lower().startswith("https://"):
+        return None, None, "jwks_url_must_be_https"
+    st, jwks = fetch(jwks_url, "application/json")
+    keys = jwks.get("keys") if st == 200 and isinstance(jwks, dict) else None
+    for k in keys if isinstance(keys, list) else []:
+        if isinstance(k, dict) and k.get("kid") == kid and k.get("kty") == "OKP" and k.get("crv") == "Ed25519" \
+                and isinstance(k.get("x"), str):
+            return k["x"], "unpinned-jwks", None
+    return None, None, "jwks_key_not_found"
+
+
+def verify_envelope(env, pinned_keys=None, jwks_url=None, fetch=None, force_pure=False):
+    """Verify { payload, digest, signature: { alg, kid, value } }.
+    Returns (valid, reason, kid, key_source). Never raises; anything unexpected is invalid.
+    With a pinned key no network access happens."""
+    pinned_keys = PINNED_KEYS if pinned_keys is None else pinned_keys
+    fetch = fetch or fetch_json
     try:
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-        Ed25519PublicKey.from_public_bytes(pub_bytes).verify(sig_bytes, message)
-        return True, "VALID (verified offline)"
-    except ImportError:
-        if ed25519_verify_pure(pub_bytes, sig_bytes, message):
-            return True, "VALID (verified offline, pure-python RFC 8032)"
-        return False, "invalid_signature"
-    except Exception:
-        return False, "invalid_signature"
+        if not isinstance(env, dict):
+            return False, "no_ed25519_attestation", None, None
+        sig = env.get("signature")
+        if not isinstance(sig, dict) or sig.get("alg") != "Ed25519":
+            return False, "no_ed25519_attestation", None, None
+        kid = sig.get("kid")
+        if not isinstance(kid, str) or not kid:
+            return False, "missing_kid", None, None
+        if not isinstance(sig.get("value"), str) or not sig["value"]:
+            return False, "missing_signature_value", kid, None
+        if not isinstance(env.get("payload"), dict):
+            return False, "missing_payload", kid, None
+        digest = hashlib.sha256(canonical_json(env["payload"]).encode("utf-8")).hexdigest()
+        if digest != env.get("digest"):
+            return False, "digest_mismatch", kid, None
+        x, source, err = _resolve_key(kid, pinned_keys, jwks_url, fetch)
+        if err:
+            return False, err, kid, None
+        pub_bytes = _b64url_bytes(x)
+        sig_bytes = _b64url_bytes(sig["value"])
+        if pub_bytes is None or len(pub_bytes) != 32:
+            return False, "bad_public_key", kid, None
+        if sig_bytes is None or len(sig_bytes) != 64:
+            return False, "invalid_signature", kid, None
+        message = f"proof-vc-v2\n{digest}".encode("utf-8")
+        ok = None
+        if not force_pure:
+            try:
+                from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+            except ImportError:
+                Ed25519PublicKey = None
+            if Ed25519PublicKey is not None:
+                try:
+                    Ed25519PublicKey.from_public_bytes(pub_bytes).verify(sig_bytes, message)
+                    ok = True
+                except Exception:
+                    ok = False
+        if ok is None:
+            ok = ed25519_verify_pure(pub_bytes, sig_bytes, message)
+        return (True, "ok", kid, source) if ok else (False, "invalid_signature", kid, None)
+    except Exception as e:  # fail closed
+        return False, f"error: {e}", None, None
+
+
+def evaluate_certificate(cert, expected_domain, min_score=80, now=None, jwks_url=None, pinned_keys=None,
+                         fetch=None, force_pure=False):
+    """Decide on a certificate. Everything that decides the outcome comes from the SIGNED payload; unsigned
+    top-level fields must agree with it. Returns a dict: status (CERTIFIED | AUDITED | UNVERIFIED), ok, score,
+    reason, signature (valid, reason, kid, key_source), payload."""
+    valid, reason, kid, source = verify_envelope(
+        cert.get("attestation") if isinstance(cert, dict) else None,
+        pinned_keys=pinned_keys, jwks_url=jwks_url, fetch=fetch, force_pure=force_pure,
+    )
+    signature = {"valid": valid, "reason": reason, "kid": kid, "key_source": source}
+
+    def reject(why):
+        return {"status": "UNVERIFIED", "ok": False, "score": None, "reason": why, "signature": signature,
+                "payload": None}
+
+    if not valid:
+        return reject(reason)
+    payload = cert["attestation"]["payload"]
+    if payload.get("domain") != expected_domain:
+        return reject("payload_domain_mismatch")
+    if cert.get("domain") != payload.get("domain"):
+        return reject("unsigned_domain_mismatch")
+    if cert.get("score") != payload.get("score"):
+        return reject("unsigned_score_mismatch")
+    if cert.get("certified") != payload.get("certified"):
+        return reject("unsigned_certified_mismatch")
+    try:
+        expires = datetime.fromisoformat(str(payload.get("expiresAt")).replace("Z", "+00:00"))
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return reject("missing_or_invalid_expiresAt")
+    if (now or datetime.now(timezone.utc)) > expires:
+        return reject("certificate_expired")
+    score = payload.get("score")
+    if isinstance(score, bool) or not isinstance(score, (int, float)):
+        return reject("invalid_score")
+    certified = payload.get("certified") is True and score >= min_score
+    return {
+        "status": "CERTIFIED" if certified else "AUDITED",
+        "ok": certified,
+        "score": score,
+        "reason": "ok" if certified else ("score_below_min_score" if payload.get("certified") is True else "not_certified"),
+        "signature": signature,
+        "payload": payload,
+    }
+
+
+def parse_challenge_token(txt):
+    """Token of a `proof-v2=challenge:<24-hex>;...` TXT value (DoH quoting tolerated), else None."""
+    if not isinstance(txt, str):
+        return None
+    flat = re.sub(r'"\s+"', "", txt)
+    flat = re.sub(r'^"|"$', "", flat)
+    m = re.search(r"(?:^|;)\s*proof-v2=challenge:([0-9a-f]{24})(?:;|$)", flat)
+    return m.group(1) if m else None
+
+
+def check_dns_challenge(domain, dns_challenge, fetch=None):
+    """Compare the certificate's dnsChallenge token with the TXT records at _proof-verify.<domain>.
+    Returns (status, detail); status is 'verified', 'not_verified' or 'not_checked' (could not be performed)."""
+    fetch = fetch or fetch_json
+    host = f"_proof-verify.{domain}"
+    expected = None
+    if isinstance(dns_challenge, dict) and dns_challenge.get("host") == host:
+        expected = parse_challenge_token(dns_challenge.get("value"))
+    if not expected:
+        return "not_checked", "certificate has no usable dnsChallenge for this domain"
+    st, d = fetch(
+        f"https://cloudflare-dns.com/dns-query?name={urllib.parse.quote(host)}&type=TXT", "application/dns-json"
+    )
+    if st != 200 or not isinstance(d, dict) or not isinstance(d.get("Status"), int):
+        return "not_checked", "DNS-over-HTTPS resolver unreachable or invalid response"
+    if d["Status"] == 3:
+        return "not_verified", "no TXT record (NXDOMAIN)"
+    if d["Status"] != 0:
+        return "not_checked", f"DNS resolver status {d['Status']}"
+    answers = [a for a in (d.get("Answer") or []) if isinstance(a, dict) and a.get("type") == 16]
+    if any(parse_challenge_token(str(a.get("data", ""))) == expected for a in answers):
+        return "verified", "TXT challenge token matches the certificate dnsChallenge (resolver: Cloudflare DoH)"
+    return "not_verified", "no TXT record with the expected challenge token"
+
+
+def parse_args(argv):
+    """Returns (domain_arg, jwks_url_or_None, error_or_None). Unknown flags are errors."""
+    jwks_url = os.environ.get("PROOF_JWKS_URL") or None
+    domain = None
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--jwks-url":
+            if i + 1 >= len(argv):
+                return None, None, "--jwks-url requires a URL"
+            jwks_url = argv[i + 1]
+            i += 1
+        elif a.startswith("--jwks-url="):
+            jwks_url = a.split("=", 1)[1]
+        elif a.startswith("-"):
+            return None, None, f"unknown option {a}"
+        elif domain is None:
+            domain = a
+        i += 1
+    return domain, jwks_url, None
 
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+    argv = sys.argv[1:]
+    if not argv or "-h" in argv or "--help" in argv:
         print_help()
-
-    raw = sys.argv[1].strip().lower()
-    raw = re.sub(r"^https?://", "", raw).split("/")[0].split(":")[0].removeprefix("www.").rstrip(".")
-    if not DOMAIN_RE.match(raw):
-        print(f"Error: invalid domain '{sys.argv[1]}'", file=sys.stderr)
+    domain_arg, jwks_url, err = parse_args(argv)
+    if err or not domain_arg:
+        print(f"Error: {err or 'missing domain'}", file=sys.stderr)
         write_github_outputs("INVALID", "", False)
         sys.exit(2)
 
-    min_score = int(os.environ.get("PROOF_MIN_SCORE", "80"))
+    raw = domain_arg.strip().lower()
+    raw = re.sub(r"^https?://", "", raw).split("/")[0].split(":")[0].removeprefix("www.").rstrip(".")
+    if not DOMAIN_RE.match(raw):
+        print(f"Error: invalid domain '{domain_arg}'", file=sys.stderr)
+        write_github_outputs("INVALID", "", False)
+        sys.exit(2)
+
+    try:
+        min_score = float(os.environ.get("PROOF_MIN_SCORE", "80"))
+        if min_score != min_score:
+            raise ValueError
+    except ValueError:
+        print("Error: PROOF_MIN_SCORE must be a number", file=sys.stderr)
+        write_github_outputs("INVALID", "", False)
+        sys.exit(2)
+
     print(f"\n[PROOF-VC v2] Verifying domain: {raw}")
     print("─" * 77)
+    if jwks_url:
+        print(UNPINNED_WARNING, file=sys.stderr)
 
-    # 1. DNS-01 Ownership TXT (_proof-verify.<domain>)
-    sys.stdout.write(f"• DNS-01 Ownership TXT (_proof-verify.{raw})... ")
-    sys.stdout.flush()
-    doh_status, doh = fetch_json(
-        f"https://cloudflare-dns.com/dns-query?name=_proof-verify.{urllib.parse.quote(raw)}&type=TXT",
-        "application/dns-json",
-    )
-    has_dns = False
-    if doh_status == 200 and isinstance(doh, dict):
-        has_dns = any("proof-v2=" in str(a.get("data", "")) for a in doh.get("Answer", []))
-    print("✔ ANCHORED" if has_dns else "○ OPTIONAL (not anchored)")
-
-    # 2. llms.txt
-    sys.stdout.write(f"• LLM Routing Index (https://{raw}/llms.txt)... ")
-    sys.stdout.flush()
-    llms_status, _ = fetch_json(f"https://{raw}/llms.txt", "text/markdown, text/plain")
-    print("✔ 200 OK" if llms_status == 200 else f"✖ {llms_status}")
-
-    # 3. A2A Agent Card
-    sys.stdout.write(f"• A2A Agent Card (https://{raw}/.well-known/agent.json)... ")
-    sys.stdout.flush()
-    agent_status, _ = fetch_json(f"https://{raw}/.well-known/agent.json", "application/json")
-    print("✔ 200 OK" if agent_status == 200 else f"✖ {agent_status}")
-
-    # 4. Live Certificate API
-    sys.stdout.write("• Querying PROOF Public Certificate API... ")
+    # 1. Live certificate (online)
+    sys.stdout.write("• Querying PROOF Public Certificate API (online)... ")
     sys.stdout.flush()
     cert_status, cert = fetch_json(
         f"https://www.proofxray.com/api/public/v1/certificate?domain={urllib.parse.quote(raw)}",
@@ -245,33 +403,51 @@ def main():
         print("  https://www.proofxray.com/#audit-gratuit\n")
         write_github_outputs("UNVERIFIED", "", False)
         sys.exit(1)
-
     print("✔ 200 OK")
-    score = int(cert.get("score", 0))
-    sig_ok = True
-    sig_note = None
-    if isinstance(cert.get("attestation"), dict):
-        sig_ok, sig_note = verify_attestation_offline(cert["attestation"])
 
-    is_certified = bool(cert.get("certified")) and score >= min_score and sig_ok
-    status_label = "CERTIFIED" if is_certified else "AUDITED"
-    write_github_outputs(status_label, str(score), is_certified)
+    # 2. Signature + decision (signed payload only)
+    result = evaluate_certificate(cert, raw, min_score=min_score, jwks_url=jwks_url)
+    sig = result["signature"]
 
+    # 3. Informational, non-gating checks
+    dns_status, dns_detail = check_dns_challenge(raw, cert.get("dnsChallenge"))
+    dns_label = {"verified": "✔ VERIFIED", "not_verified": "○ NOT VERIFIED", "not_checked": "? NOT CHECKED"}[dns_status]
+    print(f"• DNS-01 Ownership TXT (_proof-verify.{raw}): {dns_label} — {dns_detail}")
+    llms_status, _ = fetch_json(f"https://{raw}/llms.txt", "text/markdown, text/plain")
+    print(f"• LLM Routing Index (https://{raw}/llms.txt): " + ("✔ 200 OK" if llms_status == 200 else f"✖ {llms_status}"))
+    agent_status, _ = fetch_json(f"https://{raw}/.well-known/agent.json", "application/json")
+    print(f"• A2A Agent Card (https://{raw}/.well-known/agent.json): "
+          + ("✔ 200 OK" if agent_status == 200 else f"✖ {agent_status}"))
+    print("  (DNS, llms.txt and agent.json are informational and do not change the exit code)")
     print("─" * 77)
-    print(f"  • Status         : {status_label}")
-    print(f"  • Domain         : {cert.get('domain')}")
-    print(f"  • PROOF Score    : {score}/100")
-    print(f"  • Audited At     : {cert.get('auditedAt')}")
-    if cert.get("expiresAt"):
-        print(f"  • Expires At     : {cert.get('expiresAt')} ({cert.get('tier', 'snapshot')})")
-    print(f"  • SHA-256 Digest : {cert.get('fingerprint')}")
-    if cert.get("claimRoot"):
-        print(f"  • Merkle Claims  : {cert.get('claimRoot')}")
-    if sig_note:
-        print(f"  • Ed25519 Check  : {sig_note}")
+
+    if result["status"] == "UNVERIFIED":
+        write_github_outputs("UNVERIFIED", "", False)
+        if not sig["valid"]:
+            print(f"{SIGNATURE_FAIL} ({sig['reason']})")
+        else:
+            print(f"FAIL: {result['reason']}")
+        print("STATUS: UNVERIFIED\n")
+        sys.exit(1)
+
+    p = result["payload"]
+    score = result["score"]
+    write_github_outputs(result["status"], str(score), result["ok"])
+    print(f"  • Status         : {result['status']}")
+    print(f"  • Domain         : {p.get('domain')}")
+    print(f"  • PROOF Score    : {score}/100 (certified: {'yes' if p.get('certified') else 'no'}, min required: {min_score:g})")
+    print(f"  • Audited At     : {p.get('auditedAt')}")
+    print(f"  • Expires At     : {p.get('expiresAt')} ({p.get('tier', 'snapshot')})")
+    print(f"  • SHA-256 Digest : {cert['attestation'].get('digest')}")
+    if p.get("claimRoot"):
+        print(f"  • Merkle Claims  : {p.get('claimRoot')}")
+    if sig["key_source"] == "pinned":
+        print(f"  • Ed25519        : VALID — signature verified against pinned key {sig['kid']}; certificate fetched online")
+    else:
+        print(f"  • Ed25519        : VALID against UNPINNED KEY (insecure) — key {sig['kid']} fetched from {jwks_url}")
     print(f"  • Public Cert    : {cert.get('certificateUrl')}")
     print(f"  • Live Badge     : {cert.get('badgeUrl')}\n")
-    sys.exit(0 if is_certified else 1)
+    sys.exit(0 if result["ok"] else 1)
 
 
 if __name__ == "__main__":

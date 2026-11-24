@@ -21,7 +21,7 @@ Every compliant digital entity exposes:
 git clone https://github.com/monsieureka/autonomous-enterprise-standard.git
 cd autonomous-enterprise-standard
 
-# Instant verification via Node.js (verifies Ed25519 offline via JWKS) or Python 3
+# Instant verification via Node.js or Python 3 (Ed25519 checked against a pinned key; fails closed)
 node bin/cli.js proofxray.com
 python3 bin/proof-verify.py proofxray.com
 ```
