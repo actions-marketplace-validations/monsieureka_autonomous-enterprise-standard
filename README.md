@@ -1,13 +1,14 @@
 # PROOF-VC v2 — verify a website audit without trusting the vendor
 
-[![PROOF Verified](https://www.proofxray.com/api/badge?domain=proofxray.com)](https://www.proofxray.com/certifie/proofxray.com)
+[![PROOF Verified](https://www.proofxray.com/api/badge?domain=proofxray.com)](https://www.proofxray.com/en/certified/proofxray.com)
 [![npm](https://img.shields.io/npm/v/proof-verify)](https://www.npmjs.com/package/proof-verify)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.monsieureka%2Fproof--verify-111312)](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.monsieureka/proof-verify)
+[![GitHub Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-v1.0.0-111312)](https://github.com/marketplace/actions/proof-autonomous-enterprise-verifier)
 [![License: MIT](https://img.shields.io/badge/License-MIT-B6FF00.svg)](./LICENSE)
 
-A zero-dependency verifier (Node and Python) and a stdio MCP server for **Ed25519-signed website-audit certificates** issued by [PROOF X-Ray](https://www.proofxray.com). It also hosts the open EAI / AIE specification (section 1 below).
+A zero-dependency verifier (Node and Python) and a stdio MCP server for **Ed25519-signed website-audit certificates** issued by [PROOF X-Ray](https://www.proofxray.com/en). It also hosts the open EAI / AIE specification (section 1 below).
 
-**Disambiguation:** PROOF X-Ray (`proofxray.com`) is deterministic SEO, GEO (Generative Engine Optimization) and AI-visibility software. It has no connection with medical X-ray equipment, radiology or healthcare imaging.
+**Disambiguation:** PROOF X-Ray (`proofxray.com`) is deterministic SEO, GEO (Generative Engine Optimization) and AI-visibility website-audit software. It has no connection with medical X-ray equipment, radiology, healthcare imaging, or CERN ROOT/PROOF.
 
 ## Verify in 2 seconds
 
@@ -35,7 +36,7 @@ Prefer Python with no npm? `git clone` this repo, then `python3 bin/proof-verify
 
 ## Use it from an AI client (MCP) in 10 seconds
 
-Published in the official MCP Registry as `io.github.monsieureka/proof-verify`. Run command: `npx -y -p proof-verify proof-mcp`. Tools: `verify_domain_proof`, `get_transparency_log`, `get_causal_geo_benchmark` (experimental, no measured sample yet).
+Published in the official MCP Registry as `io.github.monsieureka/proof-verify`. Run command: `npx -y -p proof-verify proof-mcp`. Tools: `verify_domain_proof`, `get_transparency_log`, `get_causal_geo_benchmark` (experimental, collecting until the `n >= 30` publication threshold).
 
 **Claude Desktop** — add to `claude_desktop_config.json`, then restart the app:
 ```json
@@ -90,15 +91,15 @@ In the framework designed by **Arthur Mellin**, an **Autonomous International En
 
 | Pillar | Live Implementation | Endpoint / Proof |
 | :--- | :--- | :--- |
-| **Platform & Engine** | Deterministic 48-signal / 8-category HTML audit (~10s, zero JS) | [`https://www.proofxray.com/`](https://www.proofxray.com/) |
-| **Public Certificate Page** | Live root-homepage verified certificate | [`https://www.proofxray.com/certifie/proofxray.com`](https://www.proofxray.com/certifie/proofxray.com) |
+| **Platform & Engine** | Deterministic raw-HTML SEO/GEO audit (~10s, zero JS) | [`proofxray.com/en`](https://www.proofxray.com/en) · [`Example Report`](https://www.proofxray.com/en/report) |
+| **Public Certificate Page** | Live root-homepage verified certificate (FR & EN) | [`/en/certified/proofxray.com`](https://www.proofxray.com/en/certified/proofxray.com) · [`/certifie/proofxray.com`](https://www.proofxray.com/certifie/proofxray.com) |
 | **PROOF-VC v2 JSON API** | JCS SHA-256 Merkle `claimRoot`, bounded TTL, DOM injection guard & Ed25519 signature | [`/api/public/v1/certificate?domain=proofxray.com`](https://www.proofxray.com/api/public/v1/certificate?domain=proofxray.com) |
 | **Public Ed25519 JWKS** | Asymmetric verification keys (RFC 7517); the CLIs ship the current key pinned | [`/.well-known/jwks.json`](https://www.proofxray.com/.well-known/jwks.json) |
-| **Signed Merkle snapshot** | Ed25519-signed Merkle root over listed domains (a signed snapshot, not an append-only log; it may include expired or alerting domains) | [`/.well-known/transparency-log.json`](https://www.proofxray.com/.well-known/transparency-log.json) |
+| **Signed Merkle snapshot** | Ed25519-signed Merkle root over active certified domains (recomputed snapshot, not an append-only log) | [`/.well-known/transparency-log.json`](https://www.proofxray.com/.well-known/transparency-log.json) |
 | **Zero-Token Stapled VC** | Compact ~100-token signed entity & pricing attestation | [`/.well-known/proof-vc.json`](https://www.proofxray.com/.well-known/proof-vc.json) |
-| **GEO Benchmark (experimental)** | Experimental: anonymized benchmark endpoint, no measured sample yet (`sampleSize` 0) | [`/api/public/v1/benchmark`](https://www.proofxray.com/api/public/v1/benchmark) |
+| **GEO Benchmark (experimental)** | Anonymized benchmark endpoint (`collecting` until `n >= 30` observations) | [`/api/public/v1/benchmark`](https://www.proofxray.com/api/public/v1/benchmark) |
 | **Public Verification Badge** | SVG badge reflecting the last homepage audit; valid 7 days after it (30 days with active monitoring) | [`/api/badge?domain=proofxray.com`](https://www.proofxray.com/api/badge?domain=proofxray.com) |
-| **Canonical EAI Page & Press** | Official French canonical page + press kit | [`/entreprise-autonome-internationale`](https://www.proofxray.com/entreprise-autonome-internationale) · [`/presse`](https://www.proofxray.com/presse) |
+| **Canonical EAI Page & Press** | Official canonical pages + press kits (EN & FR) | [`/en/autonomous-international-enterprise`](https://www.proofxray.com/en/autonomous-international-enterprise) · [`/en/press`](https://www.proofxray.com/en/press) · [`/entreprise-autonome-internationale`](https://www.proofxray.com/entreprise-autonome-internationale) |
 | **LLM Routing Index** | High-density machine index + full specification | [`llms.txt`](https://www.proofxray.com/llms.txt) · [`llms-full.txt`](https://www.proofxray.com/llms-full.txt) |
 | **A2A & Security (RFC 9116)** | Agent-to-Agent discovery card + security policy | [`agent.json`](https://www.proofxray.com/.well-known/agent.json) · [`security.txt`](https://www.proofxray.com/.well-known/security.txt) |
 
@@ -121,7 +122,8 @@ node bin/cli.js proofxray.com
 # Standalone Python 3 (zero dependencies, pure-Python RFC 8032 Ed25519 fallback)
 python3 bin/proof-verify.py proofxray.com
 
-# Or, once published to npm:  npx proof-verify proofxray.com
+# Or directly via npm:
+npx proof-verify proofxray.com
 ```
 
 ### What the verifiers check, and how they fail
