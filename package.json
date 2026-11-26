@@ -1,7 +1,7 @@
 {
   "name": "proof-verify",
   "version": "1.0.1",
-  "description": "Zero-dependency CLI verifier and MCP server for PROOF X-Ray PROOF-VC v2 certificates: Ed25519 signature checked against a pinned public key, fails closed.",
+  "description": "Zero-dependency CLI verifier and MCP server for PROOF X-Ray website SEO/GEO audit certificates (software, not radiology): Ed25519 pinned-key verification, fails closed.",
   "mcpName": "io.github.monsieureka/proof-verify",
   "bin": {
     "proof-verify": "bin/cli.js",
@@ -29,10 +29,16 @@
   "keywords": [
     "autonomous-enterprise",
     "ai-agents",
+    "website-audit",
+    "seo",
+    "geo",
+    "aeo",
+    "chatgpt",
+    "mcp",
+    "mcp-server",
     "proof-vc",
     "ed25519",
     "jwks",
-    "mcp",
     "transparency-log",
     "proofxray",
     "dns-01",
