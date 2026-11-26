@@ -3,6 +3,7 @@
 [![PROOF Verified](https://www.proofxray.com/api/badge?domain=proofxray.com)](https://www.proofxray.com/en/certified/proofxray.com)
 [![npm](https://img.shields.io/npm/v/proof-verify)](https://www.npmjs.com/package/proof-verify)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.monsieureka%2Fproof--verify-111312)](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.monsieureka/proof-verify)
+[![Glama MCP](https://glama.ai/mcp/servers/monsieureka/autonomous-enterprise-standard/badges/score.svg)](https://glama.ai/mcp/servers/monsieureka/autonomous-enterprise-standard)
 [![GitHub Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-v1.0.0-111312)](https://github.com/marketplace/actions/proof-autonomous-enterprise-verifier)
 [![License: MIT](https://img.shields.io/badge/License-MIT-B6FF00.svg)](./LICENSE)
 
