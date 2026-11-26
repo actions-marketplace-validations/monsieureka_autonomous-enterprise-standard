@@ -32,8 +32,10 @@ function normalizeDomain(raw) {
   return DOMAIN_RE.test(clean) ? clean : null;
 }
 
+const MCP_USER_AGENT = `proof-xray-mcp/${lib.VERSION}`;
+
 async function fetchJson(url, accept = 'application/json') {
-  const res = await lib.fetchUrl(url, accept);
+  const res = await lib.fetchUrl(url, accept, 3, MCP_USER_AGENT);
   return { status: res.status, data: res.data && typeof res.data === 'object' ? res.data : null };
 }
 
@@ -64,7 +66,7 @@ const TOOLS = [
   {
     name: 'get_causal_geo_benchmark',
     description:
-      'Fetch the public anonymized GEO benchmark endpoint (/api/public/v1/benchmark). Experimental: no measured sample yet (sampleSize 0).',
+      'Fetch the public anonymized GEO benchmark endpoint (/api/public/v1/benchmark). Experimental: collecting until the n >= 30 publication threshold.',
     inputSchema: { type: 'object', properties: {} },
   },
 ];
