@@ -20,9 +20,13 @@
       "url": "https://www.proofxray.com/",
       "foundingDate": "2026",
       "founder": { "@id": "https://www.proofxray.com/#founder" },
-      "disambiguatingDescription": "PROOF X-Ray is a French deterministic SEO, GEO, and AI-visibility audit software platform. Unrelated to medical X-ray or radiology.",
+      "disambiguatingDescription": "PROOF X-Ray is website audit and verification software for SEO and GEO. It has no connection with radiology or medical imaging, nor with CERN's ROOT/PROOF analysis framework.",
       "sameAs": [
         "https://github.com/monsieureka/autonomous-enterprise-standard",
+        "https://www.npmjs.com/package/proof-verify",
+        "https://github.com/marketplace/actions/proof-autonomous-enterprise-verifier",
+        "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.monsieureka/proof-verify",
+        "https://dev.to/proofxray",
         "https://www.linkedin.com/company/proofxray/",
         "https://x.com/proofxray",
         "https://www.youtube.com/@proofxray",
@@ -50,6 +54,26 @@
       "author": { "@id": "https://www.proofxray.com/#founder" },
       "inDefinedTermSet": { "@id": "https://www.proofxray.com/#glossaire-eai" },
       "subjectOf": { "@id": "https://www.proofxray.com/gagner-plus-avec-ia#preuve-001" }
+    },
+    {
+      "@type": "Book",
+      "@id": "https://www.proofxray.com/en/autonomous-international-enterprise#book-aie",
+      "name": "The Autonomous International Enterprise",
+      "alternateName": "The PROOF X-Ray Standard for Cryptographic Trust, AI Search (GEO/AEO), and Sovereign Solo-Scale Operations",
+      "inLanguage": "en",
+      "bookFormat": [
+        "https://schema.org/EBook",
+        "https://schema.org/Paperback"
+      ],
+      "identifier": {
+        "@type": "PropertyValue",
+        "propertyID": "ASIN",
+        "value": "B0HSXSVJGV"
+      },
+      "url": "https://www.amazon.com/dp/B0HSXSVJGV",
+      "sameAs": "https://www.amazon.com/dp/B0HSXSVJGV",
+      "about": { "@id": "https://www.proofxray.com/#autonomous-international-enterprise" },
+      "author": { "@id": "https://www.proofxray.com/#founder" }
     },
     {
       "@type": "Book",

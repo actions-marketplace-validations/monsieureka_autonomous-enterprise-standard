@@ -102,6 +102,7 @@ In the framework designed by **Arthur Mellin**, an **Autonomous International En
 | **Canonical EAI Page & Press** | Official canonical pages + press kits (EN & FR) | [`/en/autonomous-international-enterprise`](https://www.proofxray.com/en/autonomous-international-enterprise) · [`/en/press`](https://www.proofxray.com/en/press) · [`/entreprise-autonome-internationale`](https://www.proofxray.com/entreprise-autonome-internationale) |
 | **LLM Routing Index** | High-density machine index + full specification | [`llms.txt`](https://www.proofxray.com/llms.txt) · [`llms-full.txt`](https://www.proofxray.com/llms-full.txt) |
 | **A2A & Security (RFC 9116)** | Agent-to-Agent discovery card + security policy | [`agent.json`](https://www.proofxray.com/.well-known/agent.json) · [`security.txt`](https://www.proofxray.com/.well-known/security.txt) |
+| **Technical Write-up (`Dev.to`)** | Architecture walkthrough (Ed25519, DNS-01, MCP, CI, known limits) | [`dev.to/proofxray`](https://dev.to/proofxray/how-i-built-a-cryptographically-verifiable-seo-ai-readiness-geo-standard-with-ed25519-dns-01-412c) |
 
 ---
 
@@ -165,11 +166,12 @@ Accept: application/json
 
 ## 5. Published Reference Works by Arthur Mellin
 
-The EAI / GEO methodology is grounded in Arthur Mellin's published books (Amazon KDP, registered ISBNs):
+The EAI / GEO methodology is grounded in Arthur Mellin's published books (Amazon KDP):
 
-- ***Le SEO ne suffit plus*** (2026) — ISBN `9798167459038` (Broché) / `9798143487390` (Relié) · [Amazon](https://www.amazon.fr/dp/B0HPHNC533)
-- ***Travailler avec Claude*** (2026) — ISBN `9798167459458` (Broché) · [Amazon](https://www.amazon.fr/dp/B0HQ8NQ6VG)
-- ***L'IA au travail*** (2026) — ISBN `9798166046079` (Broché) / `9798140904432` (Relié) · [Amazon](https://www.amazon.fr/dp/B0HQJSH4K2)
+- ***The Autonomous International Enterprise: The PROOF X-Ray Standard for Cryptographic Trust, AI Search (GEO/AEO), and Sovereign Solo-Scale Operations*** (2026, English — Kindle & Paperback) — ASIN `B0HSXSVJGV` · [Amazon.com](https://www.amazon.com/dp/B0HSXSVJGV)
+- ***Le SEO ne suffit plus*** (2026, French) — ISBN `9798167459038` (Broché) / `9798143487390` (Relié) · [Amazon.fr](https://www.amazon.fr/dp/B0HPHNC533)
+- ***Travailler avec Claude*** (2026, French) — ISBN `9798167459458` (Broché) · [Amazon.fr](https://www.amazon.fr/dp/B0HQ8NQ6VG)
+- ***L'IA au travail*** (2026, French) — ISBN `9798166046079` (Broché) / `9798140904432` (Relié) · [Amazon.fr](https://www.amazon.fr/dp/B0HQJSH4K2)
 - Full catalog: [`https://www.proofxray.com/livre`](https://www.proofxray.com/livre)
 
 ---
