@@ -172,6 +172,177 @@ test('signed payload is bound to the requested domain, to unsigned fields, and t
   assert.equal(noExp.ok, false);
 });
 
+test('PROOF-VC v2 rejects protocol confusion, invalid score ranges and invalid claim roots', async () => {
+  const key = newKey();
+  const resign = (c) => {
+    c.attestation.digest = crypto.createHash('sha256').update(lib.canonicalJson(c.attestation.payload)).digest('hex');
+    c.attestation.signature.value = crypto.sign(null, Buffer.from(`proof-vc-v2\n${c.attestation.digest}`), key.privateKey).toString('base64url');
+  };
+  const cases = [
+    ['invalid_attestation_protocol', (c) => { c.attestation.protocol = 'proof-v1'; }],
+    ['invalid_payload_protocol', (c) => { c.attestation.payload.protocol = 'proof-v1'; resign(c); }],
+    ['invalid_score', (c) => { c.attestation.payload.score = 101; c.score = 101; resign(c); }],
+    ['invalid_claim_root', (c) => { c.attestation.payload.claimRoot = 'not-a-sha256'; resign(c); }],
+    ['missing_or_invalid_auditedAt', (c) => { c.attestation.payload.auditedAt = 'invalid'; resign(c); }],
+    ['invalid_certificate_interval', (c) => { c.attestation.payload.auditedAt = '2026-12-10T00:00:00Z'; resign(c); }],
+  ];
+  for (const [expectedReason, mutate] of cases) {
+    const cert = certificate(key);
+    mutate(cert);
+    const r = await lib.evaluateCertificate(cert, DOMAIN, ctx(key));
+    assert.equal(r.status, 'UNVERIFIED');
+    assert.equal(r.reason, expectedReason);
+  }
+});
+
+test('Merkle claimRoot is reconstructed from claimLeaves (0x00 leaf, 0x01 internal node) and rejects tampered leaves', async () => {
+  const key = newKey();
+  const sha256Hex = (b) => crypto.createHash('sha256').update(b).digest('hex');
+  const rawFacts = [
+    '{"field":"name","normalized":"PROOF X-Ray","source":"jsonld","url":"https://www.proofxray.com/"}',
+    '{"field":"protocol","normalized":"proof-vc-v2","source":"meta","url":"https://www.proofxray.com/proof-vc"}',
+    '{"field":"siret","normalized":"50996962200067","source":"html","url":"https://www.proofxray.com/"}',
+  ];
+  const claimLeaves = rawFacts.map((canonical) => ({
+    canonical,
+    leafHash: sha256Hex(Buffer.concat([Buffer.from([0x00]), Buffer.from(canonical, 'utf8')])),
+  }));
+  const computed = lib.computeClaimRootFromLeaves(claimLeaves);
+  assert.equal(computed.valid, true);
+  assert.equal(computed.leavesCount, 3);
+
+  const cert = certificate(key, { payload: { claimRoot: computed.claimRoot } });
+  cert.claimLeaves = claimLeaves;
+  const okRes = await lib.evaluateCertificate(cert, DOMAIN, ctx(key));
+  assert.equal(okRes.status, 'CERTIFIED');
+
+  // Tamper one leaf's canonical content without updating leafHash -> claim_leaf_hash_mismatch
+  const tamperedLeafCert = certificate(key, { payload: { claimRoot: computed.claimRoot } });
+  tamperedLeafCert.claimLeaves = claimLeaves.map((l, idx) => (idx === 1 ? { ...l, canonical: `${l.canonical} ` } : l));
+  const badLeaf = await lib.evaluateCertificate(tamperedLeafCert, DOMAIN, ctx(key));
+  assert.equal(badLeaf.status, 'UNVERIFIED');
+  assert.equal(badLeaf.reason, 'claim_leaf_hash_mismatch');
+
+  // Valid leafHash but does not match signed claimRoot -> claim_root_mismatch
+  const tamperedRootCert = certificate(key, { payload: { claimRoot: 'a'.repeat(64) } });
+  tamperedRootCert.claimLeaves = claimLeaves;
+  const badRoot = await lib.evaluateCertificate(tamperedRootCert, DOMAIN, ctx(key));
+  assert.equal(badRoot.status, 'UNVERIFIED');
+  assert.equal(badRoot.reason, 'claim_root_mismatch');
+
+  // Mandatory claimLeaves when claimRoot is present -> missing_claim_leaves
+  const missingLeavesCert = certificate(key, { payload: { claimRoot: computed.claimRoot } });
+  const missingRes = await lib.evaluateCertificate(missingLeavesCert, DOMAIN, ctx(key));
+  assert.equal(missingRes.status, 'UNVERIFIED');
+  assert.equal(missingRes.reason, 'missing_claim_leaves');
+
+  // Null claimLeaves -> invalid_claim_leaves (strict Node/Python parity)
+  const nullLeavesCert = certificate(key, { payload: { claimRoot: computed.claimRoot } });
+  nullLeavesCert.claimLeaves = null;
+  const nullRes = await lib.evaluateCertificate(nullLeavesCert, DOMAIN, ctx(key));
+  assert.equal(nullRes.status, 'UNVERIFIED');
+  assert.equal(nullRes.reason, 'invalid_claim_leaves');
+
+  const nullLeavesNoRootCert = certificate(key);
+  nullLeavesNoRootCert.claimLeaves = null;
+  const nullNoRootRes = await lib.evaluateCertificate(nullLeavesNoRootCert, DOMAIN, ctx(key));
+  assert.equal(nullNoRootRes.status, 'UNVERIFIED');
+  assert.equal(nullNoRootRes.reason, 'invalid_claim_leaves');
+});
+
+test('JCS RFC 8785 canonicalJson matches fixed cross-language vector, floats, UTF-16 key order and rejects NaN/Infinity', () => {
+  const vector = {
+    z: 1.0,
+    negZero: -0.0,
+    exp: 1e21,
+    micro: 0.000001,
+    frac: 333333333.3333333,
+    '\ufb00': 'ff',
+    '\ud83d\ude00': 'grin',
+    '\u20ac': 'euro',
+    a: ['x', { d: true, b: null, c: 94 }],
+    m: 'proof-vc-v2',
+  };
+  const expectedCanonical =
+    '{"a":["x",{"b":null,"c":94,"d":true}],"exp":1e+21,"frac":333333333.3333333,"m":"proof-vc-v2","micro":0.000001,"negZero":0,"z":1,"\u20ac":"euro","\ud83d\ude00":"grin","\ufb00":"ff"}';
+  const expectedSha256 = '5407c528fbd9ea23c274ffac0a5c84ca7f23c39c366ef3a78422d8c267481fb9';
+  assert.equal(lib.canonicalJson(vector), expectedCanonical);
+  assert.equal(crypto.createHash('sha256').update(lib.canonicalJson(vector), 'utf8').digest('hex'), expectedSha256);
+  assert.throws(() => lib.canonicalJson({ bad: Number.NaN }), /non_finite_number/);
+  assert.throws(() => lib.canonicalJson({ bad: Number.POSITIVE_INFINITY }), /non_finite_number/);
+});
+
+test('JCS large JSON integers use ECMAScript binary64 representation', () => {
+  const vector = JSON.parse('{"a":9007199254740993,"b":100000000000000000000,"c":-9007199254740993}');
+  const expected = '{"a":9007199254740992,"b":100000000000000000000,"c":-9007199254740992}';
+  assert.equal(lib.canonicalJson(vector), expected);
+  assert.equal(crypto.createHash('sha256').update(lib.canonicalJson(vector)).digest('hex'), crypto.createHash('sha256').update(expected).digest('hex'));
+});
+
+test('evaluateCertificate rejects revoked certificates, revoked scanIds and revoked key IDs', async () => {
+  const key = newKey();
+  const c1 = certificate(key);
+  c1.status = 'revoked';
+  assert.equal((await lib.evaluateCertificate(c1, DOMAIN, ctx(key))).reason, 'certificate_revoked');
+
+  const c2 = certificate(key, { payload: { revoked: true } });
+  assert.equal((await lib.evaluateCertificate(c2, DOMAIN, ctx(key))).reason, 'certificate_revoked');
+
+  const c3 = certificate(key, { payload: { scanId: 'scan-revoked-1' } });
+  assert.equal((await lib.evaluateCertificate(c3, DOMAIN, ctx(key, { revokedScanIds: ['scan-revoked-1'] }))).reason, 'certificate_revoked');
+
+  const c4 = certificate(key);
+  assert.equal((await lib.evaluateCertificate(c4, DOMAIN, ctx(key, { revokedKids: [KID] }))).reason, 'key_revoked');
+});
+
+test('verifyRevocationList and fetchAndVerifyRevocations enforce pinned Ed25519 signature and expiry', async () => {
+  const key = newKey();
+  const revPayload = {
+    protocol: 'proof-revocations-v1',
+    updatedAt: '2026-11-24T00:00:00.000Z',
+    expiresAt: '2026-11-26T00:00:00.000Z',
+    revokedKids: ['old-kid'],
+    revokedScanIds: ['scan-bad'],
+  };
+  const revEnv = envelope(revPayload, key);
+  const ok = await lib.verifyRevocationList(revEnv, ctx(key));
+  assert.equal(ok.valid, true);
+  assert.deepEqual(ok.revokedKids, ['old-kid']);
+  assert.deepEqual(ok.revokedScanIds, ['scan-bad']);
+
+  const tampered = structuredClone(revEnv);
+  tampered.payload.revokedKids = [];
+  const bad = await lib.verifyRevocationList(tampered, ctx(key));
+  assert.equal(bad.valid, false);
+  assert.equal(bad.reason, 'digest_mismatch');
+
+  const expired = await lib.verifyRevocationList(revEnv, ctx(key, { now: new Date('2026-11-27T00:00:00Z') }));
+  assert.equal(expired.valid, false);
+  assert.equal(expired.reason, 'revocation_list_expired');
+
+  const fetched = await lib.fetchAndVerifyRevocations({
+    ...ctx(key),
+    fetchJson: async () => ({ status: 200, data: revEnv }),
+  });
+  assert.equal(fetched.status, 'verified');
+  assert.deepEqual(fetched.revokedScanIds, ['scan-bad']);
+
+  const cert = certificate(key, { payload: { scanId: 'scan-bad' } });
+  const evalRevoked = await lib.evaluateCertificate(cert, DOMAIN, ctx(key, {
+    revokedKids: fetched.revokedKids,
+    revokedScanIds: fetched.revokedScanIds,
+  }));
+  assert.equal(evalRevoked.status, 'UNVERIFIED');
+  assert.equal(evalRevoked.reason, 'certificate_revoked');
+
+  const reqFailDefault = await lib.fetchAndVerifyRevocations({ fetchJson: async () => ({ status: 404, data: {} }) });
+  assert.equal(reqFailDefault.status, 'failed');
+  assert.equal(reqFailDefault.reason, 'revocation_list_unavailable');
+
+  const optOut = await lib.fetchAndVerifyRevocations({ requireRevocations: false, fetchJson: async () => ({ status: 404, data: {} }) });
+  assert.equal(optOut.status, 'not_published');
+});
+
 const TOKEN = '318926611b90a11d9392bc21';
 const challenge = { host: `_proof-verify.${DOMAIN}`, value: `proof-v2=challenge:${TOKEN};jwks=https://x/j;kid=k` };
 const doh = (body, status = 200) => async () => ({ status, data: body });

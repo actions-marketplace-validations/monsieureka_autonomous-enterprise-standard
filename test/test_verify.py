@@ -3,6 +3,7 @@
 Signing uses the repo's own pure-Python Ed25519 primitives (RFC 8032), checked against the RFC test vector.
 """
 import base64
+import copy
 import hashlib
 import importlib.util
 import os
@@ -192,6 +193,179 @@ class Verification(unittest.TestCase):
         late = self.evaluate(certificate(seed), pinned, now=datetime(2026, 12, 2, tzinfo=timezone.utc))
         self.assertEqual((late["ok"], late["reason"]), (False, "certificate_expired"))
         self.assertFalse(self.evaluate(certificate(seed, {"expiresAt": "garbage"}), pinned)["ok"])
+
+
+    def test_protocol_score_timestamp_and_claim_root_invariants(self):
+        seed, x = new_key()
+        pinned = [{"kid": KID, "x": x}]
+
+        def resign(c):
+            payload = c["attestation"]["payload"]
+            digest = hashlib.sha256(pv.canonical_json(payload).encode("utf-8")).hexdigest()
+            c["attestation"]["digest"] = digest
+            c["attestation"]["signature"]["value"] = b64u(sign(seed, f"proof-vc-v2\n{digest}".encode("utf-8")))
+            return c
+
+        c1 = certificate(seed); c1["attestation"]["protocol"] = "proof-v1"
+        c2 = certificate(seed, {"protocol": "proof-v1"}); resign(c2)
+        c3 = certificate(seed, {"score": 101}, score=101); resign(c3)
+        c4 = certificate(seed, {"claimRoot": "not-a-sha256"}); resign(c4)
+        c5 = certificate(seed, {"auditedAt": "invalid"}); resign(c5)
+        c6 = certificate(seed, {"auditedAt": "2026-12-10T00:00:00Z"}); resign(c6)
+        cases = [
+            ("invalid_attestation_protocol", c1),
+            ("invalid_payload_protocol", c2),
+            ("invalid_score", c3),
+            ("invalid_claim_root", c4),
+            ("missing_or_invalid_certificate_timestamp", c5),
+            ("invalid_certificate_interval", c6),
+        ]
+        for expected_reason, cert in cases:
+            r = self.evaluate(cert, pinned)
+            self.assertEqual(r["status"], "UNVERIFIED")
+            self.assertEqual(r["reason"], expected_reason)
+
+    def test_merkle_claim_root_reconstructed_from_claim_leaves_and_rejects_tampering(self):
+        seed, x = new_key()
+        pinned = [{"kid": KID, "x": x}]
+        raw_facts = [
+            '{"field":"name","normalized":"PROOF X-Ray","source":"jsonld","url":"https://www.proofxray.com/"}',
+            '{"field":"protocol","normalized":"proof-vc-v2","source":"meta","url":"https://www.proofxray.com/proof-vc"}',
+            '{"field":"siret","normalized":"50996962200067","source":"html","url":"https://www.proofxray.com/"}',
+        ]
+        claim_leaves = [
+            {
+                "canonical": canonical,
+                "leafHash": hashlib.sha256(b"\x00" + canonical.encode("utf-8")).hexdigest(),
+            }
+            for canonical in raw_facts
+        ]
+        ok, computed_root, count = pv.compute_claim_root_from_leaves(claim_leaves)
+        self.assertTrue(ok)
+        self.assertEqual(count, 3)
+
+        cert = certificate(seed, {"claimRoot": computed_root})
+        cert["claimLeaves"] = claim_leaves
+        r_ok = self.evaluate(cert, pinned)
+        self.assertEqual(r_ok["status"], "CERTIFIED")
+
+        tampered_leaf_cert = certificate(seed, {"claimRoot": computed_root})
+        tampered_leaf_cert["claimLeaves"] = [
+            {**l, "canonical": l["canonical"] + " "} if i == 1 else l
+            for i, l in enumerate(claim_leaves)
+        ]
+        r_bad_leaf = self.evaluate(tampered_leaf_cert, pinned)
+        self.assertEqual((r_bad_leaf["status"], r_bad_leaf["reason"]), ("UNVERIFIED", "claim_leaf_hash_mismatch"))
+
+        tampered_root_cert = certificate(seed, {"claimRoot": "a" * 64})
+        tampered_root_cert["claimLeaves"] = claim_leaves
+        r_bad_root = self.evaluate(tampered_root_cert, pinned)
+        self.assertEqual((r_bad_root["status"], r_bad_root["reason"]), ("UNVERIFIED", "claim_root_mismatch"))
+
+        missing_leaves_cert = certificate(seed, {"claimRoot": computed_root})
+        r_missing = self.evaluate(missing_leaves_cert, pinned)
+        self.assertEqual((r_missing["status"], r_missing["reason"]), ("UNVERIFIED", "missing_claim_leaves"))
+
+        null_leaves_cert = certificate(seed, {"claimRoot": computed_root})
+        null_leaves_cert["claimLeaves"] = None
+        r_null = self.evaluate(null_leaves_cert, pinned)
+        self.assertEqual((r_null["status"], r_null["reason"]), ("UNVERIFIED", "invalid_claim_leaves"))
+
+        null_no_root_cert = certificate(seed)
+        null_no_root_cert["claimLeaves"] = None
+        r_null_no_root = self.evaluate(null_no_root_cert, pinned)
+        self.assertEqual((r_null_no_root["status"], r_null_no_root["reason"]), ("UNVERIFIED", "invalid_claim_leaves"))
+
+    def test_jcs_rfc8785_cross_language_vector_floats_utf16_order_and_non_finite_rejection(self):
+        vector = {
+            "z": 1.0,
+            "negZero": -0.0,
+            "exp": 1e21,
+            "micro": 0.000001,
+            "frac": 333333333.3333333,
+            "\ufb00": "ff",
+            "\U0001f600": "grin",
+            "\u20ac": "euro",
+            "a": ["x", {"d": True, "b": None, "c": 94}],
+            "m": "proof-vc-v2",
+        }
+        expected_canonical = (
+            '{"a":["x",{"b":null,"c":94,"d":true}],"exp":1e+21,"frac":333333333.3333333,"m":"proof-vc-v2",'
+            '"micro":0.000001,"negZero":0,"z":1,"\u20ac":"euro","\U0001f600":"grin","\ufb00":"ff"}'
+        )
+        expected_sha256 = "5407c528fbd9ea23c274ffac0a5c84ca7f23c39c366ef3a78422d8c267481fb9"
+        self.assertEqual(pv.canonical_json(vector), expected_canonical)
+        self.assertEqual(hashlib.sha256(pv.canonical_json(vector).encode("utf-8")).hexdigest(), expected_sha256)
+        with self.assertRaises(ValueError):
+            pv.canonical_json({"bad": float("nan")})
+        with self.assertRaises(ValueError):
+            pv.canonical_json({"bad": float("inf")})
+
+    def test_jcs_large_json_integers_follow_ecmascript_binary64(self):
+        vector = {"a": 9007199254740993, "b": 100000000000000000000, "c": -9007199254740993}
+        expected = '{"a":9007199254740992,"b":100000000000000000000,"c":-9007199254740992}'
+        self.assertEqual(pv.canonical_json(vector), expected)
+        self.assertEqual(hashlib.sha256(pv.canonical_json(vector).encode("utf-8")).hexdigest(),
+                         hashlib.sha256(expected.encode("utf-8")).hexdigest())
+        with self.assertRaises(ValueError):
+            pv.canonical_json({"huge": 10 ** 400})
+
+    def test_rejects_revoked_certificates_revoked_scan_ids_and_revoked_kids(self):
+        seed, x = new_key()
+        pinned = [{"kid": KID, "x": x}]
+        c1 = certificate(seed)
+        c1["status"] = "revoked"
+        self.assertEqual(self.evaluate(c1, pinned)["reason"], "certificate_revoked")
+
+        c2 = certificate(seed, {"revoked": True})
+        self.assertEqual(self.evaluate(c2, pinned)["reason"], "certificate_revoked")
+
+        c3 = certificate(seed, {"scanId": "scan-revoked-1"})
+        r3 = pv.evaluate_certificate(c3, DOMAIN, pinned_keys=pinned, now=NOW, fetch=no_network, revoked_scan_ids=["scan-revoked-1"])
+        self.assertEqual(r3["reason"], "certificate_revoked")
+
+        c4 = certificate(seed)
+        r4 = pv.evaluate_certificate(c4, DOMAIN, pinned_keys=pinned, now=NOW, fetch=no_network, revoked_kids=[KID])
+        self.assertEqual(r4["reason"], "key_revoked")
+
+    def test_verify_and_fetch_signed_revocation_list(self):
+        seed, x = new_key()
+        pinned = [{"kid": KID, "x": x}]
+        rev_payload = {
+            "protocol": "proof-revocations-v1",
+            "updatedAt": "2026-11-24T00:00:00.000Z",
+            "expiresAt": "2026-11-26T00:00:00.000Z",
+            "revokedKids": ["old-kid"],
+            "revokedScanIds": ["scan-bad"],
+        }
+        rev_env = envelope(rev_payload, seed)
+        ok = pv.verify_revocation_list(rev_env, now=NOW, pinned_keys=pinned, fetch=no_network)
+        self.assertTrue(ok["valid"])
+        self.assertEqual(ok["revoked_kids"], ["old-kid"])
+        self.assertEqual(ok["revoked_scan_ids"], ["scan-bad"])
+
+        tampered = copy.deepcopy(rev_env)
+        tampered["payload"]["revokedKids"] = []
+        bad = pv.verify_revocation_list(tampered, now=NOW, pinned_keys=pinned, fetch=no_network)
+        self.assertFalse(bad["valid"])
+        self.assertEqual(bad["reason"], "digest_mismatch")
+
+        expired = pv.verify_revocation_list(rev_env, now=datetime(2026, 11, 27, tzinfo=timezone.utc), pinned_keys=pinned, fetch=no_network)
+        self.assertFalse(expired["valid"])
+        self.assertEqual(expired["reason"], "revocation_list_expired")
+
+        fetched = pv.fetch_and_verify_revocations(now=NOW, pinned_keys=pinned, fetch=lambda u, a: (200, rev_env))
+        self.assertEqual(fetched["status"], "verified")
+        cert = certificate(seed, {"scanId": "scan-bad"})
+        r_rev = pv.evaluate_certificate(cert, DOMAIN, pinned_keys=pinned, now=NOW, fetch=no_network,
+                                        revoked_kids=fetched["revoked_kids"], revoked_scan_ids=fetched["revoked_scan_ids"])
+        self.assertEqual((r_rev["status"], r_rev["reason"]), ("UNVERIFIED", "certificate_revoked"))
+
+        req_fail_default = pv.fetch_and_verify_revocations(fetch=lambda u, a: (404, {}))
+        self.assertEqual((req_fail_default["status"], req_fail_default["reason"]), ("failed", "revocation_list_unavailable"))
+
+        opt_out = pv.fetch_and_verify_revocations(require_revocations=False, fetch=lambda u, a: (404, {}))
+        self.assertEqual(opt_out["status"], "not_published")
 
 
 class Dns(unittest.TestCase):

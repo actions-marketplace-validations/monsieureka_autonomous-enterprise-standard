@@ -9,8 +9,10 @@ Copyright (c) 2026 Arthur Mellin / PROOF X-Ray (https://www.proofxray.com)
 """
 
 import base64
+from decimal import Decimal
 import hashlib
 import json
+import math
 import os
 import re
 import sys
@@ -22,7 +24,7 @@ import urllib.request
 DOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
 
 
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 AUDIT_URL = "https://www.proofxray.com/en#audit-gratuit"
 
 
@@ -63,8 +65,94 @@ def print_help():
     sys.exit(0)
 
 
+def _jcs_number(val) -> str:
+    if isinstance(val, bool):
+        return "true" if val else "false"
+    if isinstance(val, int):
+        # JSON numbers are IEEE-754 binary64 in ECMAScript. Python parses them as
+        # arbitrary-precision integers; round to binary64 before JCS formatting.
+        try:
+            val = float(val)
+        except OverflowError as exc:
+            raise ValueError("non_finite_number") from exc
+    if not isinstance(val, float) or not math.isfinite(val):
+        raise ValueError("non_finite_number")
+    if val == 0.0:
+        return "0"
+    sign = "-" if val < 0 else ""
+    av = abs(val)
+    d = Decimal(repr(av)).normalize()
+    dt = d.as_tuple()
+    digits = "".join(str(x) for x in dt.digits)
+    exp10 = dt.exponent + len(digits) - 1
+    if -6 <= exp10 < 21:
+        k = len(digits)
+        n = exp10 + 1
+        if k <= n:
+            return sign + digits + ("0" * (n - k))
+        if n > 0:
+            return sign + digits[:n] + "." + digits[n:]
+        return sign + "0." + ("0" * (-n)) + digits
+    mant = digits if len(digits) == 1 else (digits[0] + "." + digits[1:])
+    es = "+" if exp10 >= 0 else "-"
+    return f"{sign}{mant}e{es}{abs(exp10)}"
+
+
 def canonical_json(obj) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    """RFC 8785 (JCS) deterministic JSON serializer matching ECMAScript / Node.js canonicalJson:
+    - Object keys sorted lexicographically by UTF-16 code units (UTF-16BE byte order)
+    - Numbers rounded to binary64 and formatted per ECMAScript 7.1.12.1
+      (1.0 -> '1', -0.0 -> '0', non-finite rejected)"""
+    if obj is None:
+        return "null"
+    if isinstance(obj, bool):
+        return "true" if obj else "false"
+    if isinstance(obj, (int, float)):
+        return _jcs_number(obj)
+    if isinstance(obj, str):
+        return json.dumps(obj, ensure_ascii=False)
+    if isinstance(obj, (list, tuple)):
+        return "[" + ",".join(canonical_json(x) for x in obj) + "]"
+    if isinstance(obj, dict):
+        items = sorted(obj.items(), key=lambda kv: str(kv[0]).encode("utf-16-be"))
+        return "{" + ",".join(f"{json.dumps(str(k), ensure_ascii=False)}:{canonical_json(v)}" for k, v in items) + "}"
+    raise TypeError(f"Unsupported JCS type: {type(obj).__name__}")
+
+
+CLAIM_EMPTY_ROOT_LABEL = "proof-claims-empty-v2"
+
+
+def compute_claim_root_from_leaves(claim_leaves):
+    """Recompute the Merkle claimRoot from published claimLeaves:
+    - each leaf is { canonical: str, leafHash: hex64 }, with leafHash = SHA-256(0x00 || UTF-8(canonical))
+    - internal nodes are SHA-256(0x01 || leftBytes || rightBytes), odd end-of-level node paired with itself
+    - empty leaf list hashes CLAIM_EMPTY_ROOT_LABEL
+    Returns (True, claim_root, leaves_count) or (False, reason, 0)."""
+    if not isinstance(claim_leaves, list):
+        return False, "invalid_claim_leaves", 0
+    if len(claim_leaves) == 0:
+        empty_root = hashlib.sha256(CLAIM_EMPTY_ROOT_LABEL.encode("utf-8")).hexdigest()
+        return True, empty_root, 0
+    level = []
+    for leaf in claim_leaves:
+        if not isinstance(leaf, dict):
+            return False, "invalid_claim_leaves", 0
+        canonical = leaf.get("canonical")
+        leaf_hash = leaf.get("leafHash")
+        if not isinstance(canonical, str) or not isinstance(leaf_hash, str) or not re.fullmatch(r"[a-fA-F0-9]{64}", leaf_hash):
+            return False, "invalid_claim_leaves", 0
+        expected = hashlib.sha256(b"\x00" + canonical.encode("utf-8")).hexdigest()
+        if expected != leaf_hash.lower():
+            return False, "claim_leaf_hash_mismatch", 0
+        level.append(expected)
+    while len(level) > 1:
+        nxt = []
+        for i in range(0, len(level), 2):
+            left = level[i]
+            right = level[i + 1] if i + 1 < len(level) else left
+            nxt.append(hashlib.sha256(b"\x01" + bytes.fromhex(left) + bytes.fromhex(right)).hexdigest())
+        level = nxt
+    return True, level[0], len(claim_leaves)
 
 
 def write_github_outputs(status: str, score: str, certified: bool):
@@ -263,7 +351,7 @@ def verify_envelope(env, pinned_keys=None, jwks_url=None, fetch=None, force_pure
 
 
 def evaluate_certificate(cert, expected_domain, min_score=80, now=None, jwks_url=None, pinned_keys=None,
-                         fetch=None, force_pure=False):
+                         fetch=None, force_pure=False, revoked_kids=None, revoked_scan_ids=None):
     """Decide on a certificate. Everything that decides the outcome comes from the SIGNED payload; unsigned
     top-level fields must agree with it. Returns a dict: status (CERTIFIED | AUDITED | UNVERIFIED), ok, score,
     reason, signature (valid, reason, kid, key_source), payload."""
@@ -279,7 +367,18 @@ def evaluate_certificate(cert, expected_domain, min_score=80, now=None, jwks_url
 
     if not valid:
         return reject(reason)
-    payload = cert["attestation"]["payload"]
+    envelope = cert.get("attestation") if isinstance(cert, dict) else None
+    if not isinstance(envelope, dict) or envelope.get("protocol") != "proof-vc-v2":
+        return reject("invalid_attestation_protocol")
+    payload = envelope.get("payload")
+    if not isinstance(payload, dict) or payload.get("protocol") != "proof-vc-v2":
+        return reject("invalid_payload_protocol")
+    if cert.get("status") == "revoked" or cert.get("revoked") is True or payload.get("revoked") is True:
+        return reject("certificate_revoked")
+    if isinstance(revoked_kids, (list, tuple, set)) and kid in revoked_kids:
+        return reject("key_revoked")
+    if isinstance(revoked_scan_ids, (list, tuple, set)) and isinstance(payload.get("scanId"), str) and payload.get("scanId") in revoked_scan_ids:
+        return reject("certificate_revoked")
     if payload.get("domain") != expected_domain:
         return reject("payload_domain_mismatch")
     if cert.get("domain") != payload.get("domain"):
@@ -288,17 +387,43 @@ def evaluate_certificate(cert, expected_domain, min_score=80, now=None, jwks_url
         return reject("unsigned_score_mismatch")
     if cert.get("certified") != payload.get("certified"):
         return reject("unsigned_certified_mismatch")
+    if not isinstance(payload.get("certified"), bool):
+        return reject("invalid_certified_flag")
     try:
         expires = datetime.fromisoformat(str(payload.get("expiresAt")).replace("Z", "+00:00"))
+        audited = datetime.fromisoformat(str(payload.get("auditedAt")).replace("Z", "+00:00"))
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=timezone.utc)
-    except ValueError:
-        return reject("missing_or_invalid_expiresAt")
+        if audited.tzinfo is None:
+            audited = audited.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return reject("missing_or_invalid_certificate_timestamp")
+    if audited > expires:
+        return reject("invalid_certificate_interval")
     if (now or datetime.now(timezone.utc)) > expires:
         return reject("certificate_expired")
     score = payload.get("score")
-    if isinstance(score, bool) or not isinstance(score, (int, float)):
+    if isinstance(score, bool) or not isinstance(score, (int, float)) or not (0 <= score <= 100):
         return reject("invalid_score")
+    has_claim_root = "claimRoot" in payload and payload.get("claimRoot") is not None
+    has_claim_leaves_prop = "claimLeaves" in cert
+    if has_claim_root:
+        claim_root = payload.get("claimRoot")
+        if not isinstance(claim_root, str) or not re.fullmatch(r"[a-fA-F0-9]{64}", claim_root):
+            return reject("invalid_claim_root")
+        if not has_claim_leaves_prop:
+            return reject("missing_claim_leaves")
+        ok_leaves, computed_root_or_reason, _ = compute_claim_root_from_leaves(cert.get("claimLeaves"))
+        if not ok_leaves:
+            return reject(computed_root_or_reason)
+        if computed_root_or_reason != claim_root.lower():
+            return reject("claim_root_mismatch")
+    elif has_claim_leaves_prop:
+        ok_leaves, computed_root_or_reason, _ = compute_claim_root_from_leaves(cert.get("claimLeaves"))
+        if not ok_leaves:
+            return reject(computed_root_or_reason)
+    if not (0 <= min_score <= 100):
+        return reject("invalid_min_score")
     certified = payload.get("certified") is True and score >= min_score
     return {
         "status": "CERTIFIED" if certified else "AUDITED",
@@ -343,6 +468,75 @@ def check_dns_challenge(domain, dns_challenge, fetch=None):
     if any(parse_challenge_token(str(a.get("data", ""))) == expected for a in answers):
         return "verified", "TXT challenge token matches the certificate dnsChallenge (resolver: Cloudflare DoH)"
     return "not_verified", "no TXT record with the expected challenge token"
+
+
+REVOCATIONS_URL = "https://www.proofxray.com/.well-known/revocations.json"
+
+
+def verify_revocation_list(rev_doc, now=None, jwks_url=None, pinned_keys=None, fetch=None, force_pure=False):
+    """Verify an authenticated, Ed25519-signed revocation list envelope (proof-revocations-v1)
+    against the PINNED root key (or explicit jwks_url opt-in), failing closed on tampering or expiry."""
+    valid, reason, kid, source = verify_envelope(
+        rev_doc if isinstance(rev_doc, dict) else None,
+        pinned_keys=pinned_keys, jwks_url=jwks_url, fetch=fetch, force_pure=force_pure,
+    )
+    signature = {"valid": valid, "reason": reason, "kid": kid, "key_source": source}
+
+    def reject(why):
+        return {"valid": False, "reason": why, "revoked_kids": [], "revoked_scan_ids": [], "signature": signature}
+
+    if not valid:
+        return reject(reason)
+    if rev_doc.get("protocol") != "proof-vc-v2":
+        return reject("invalid_revocations_envelope")
+    payload = rev_doc.get("payload")
+    if not isinstance(payload, dict) or payload.get("protocol") != "proof-revocations-v1":
+        return reject("invalid_revocations_protocol")
+    try:
+        expires = datetime.fromisoformat(str(payload.get("expiresAt")).replace("Z", "+00:00"))
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return reject("missing_or_invalid_revocations_expiresAt")
+    if (now or datetime.now(timezone.utc)) > expires:
+        return reject("revocation_list_expired")
+    kids = payload.get("revokedKids")
+    scans = payload.get("revokedScanIds")
+    if not isinstance(kids, list) or not isinstance(scans, list):
+        return reject("invalid_revocations_lists")
+    return {
+        "valid": True,
+        "reason": "ok",
+        "revoked_kids": [k for k in kids if isinstance(k, str) and k],
+        "revoked_scan_ids": [s for s in scans if isinstance(s, str) and s],
+        "expires_at": payload.get("expiresAt"),
+        "updated_at": payload.get("updatedAt"),
+        "signature": signature,
+    }
+
+
+def fetch_and_verify_revocations(revocations_url=None, require_revocations=True, now=None, jwks_url=None,
+                                 pinned_keys=None, fetch=None, force_pure=False):
+    fetch_fn = fetch or fetch_json
+    st, data = fetch_fn(revocations_url or REVOCATIONS_URL, "application/json")
+    if st in (404, 503):
+        if require_revocations:
+            return {"status": "failed", "reason": "revocation_list_unavailable", "revoked_kids": [], "revoked_scan_ids": []}
+        return {"status": "not_published", "reason": f"http_{st}", "revoked_kids": [], "revoked_scan_ids": []}
+    if st != 200 or not isinstance(data, dict):
+        return {"status": "failed", "reason": "revocation_list_fetch_failed", "revoked_kids": [], "revoked_scan_ids": []}
+    checked = verify_revocation_list(
+        data, now=now, jwks_url=jwks_url, pinned_keys=pinned_keys, fetch=fetch, force_pure=force_pure,
+    )
+    if not checked["valid"]:
+        return {"status": "failed", "reason": checked["reason"], "revoked_kids": [], "revoked_scan_ids": []}
+    return {
+        "status": "verified",
+        "reason": "ok",
+        "revoked_kids": checked["revoked_kids"],
+        "revoked_scan_ids": checked["revoked_scan_ids"],
+        "expires_at": checked["expires_at"],
+    }
 
 
 def parse_args(argv):
@@ -414,8 +608,32 @@ def main():
         sys.exit(1)
     print("✔ 200 OK")
 
-    # 2. Signature + decision (signed payload only)
-    result = evaluate_certificate(cert, raw, min_score=min_score, jwks_url=jwks_url)
+    # 2. Signed revocation list (online, verified against pinned key)
+    rev = fetch_and_verify_revocations(jwks_url=jwks_url)
+    if rev["status"] == "failed":
+        print(f"• Signed Revocations (/.well-known/revocations.json): ✖ FAIL ({rev['reason']})")
+        print("─" * 77)
+        print(f"FAIL: {rev['reason']}")
+        print("STATUS: UNVERIFIED\n")
+        write_github_outputs("UNVERIFIED", "", False)
+        sys.exit(1)
+    if rev["status"] == "verified":
+        print(
+            f"• Signed Revocations (/.well-known/revocations.json): ✔ VERIFIED "
+            f"({len(rev['revoked_kids'])} revoked keys, {len(rev['revoked_scan_ids'])} revoked scans)"
+        )
+    else:
+        print("• Signed Revocations (/.well-known/revocations.json): ○ NOT PUBLISHED YET")
+
+    # 3. Signature + decision (signed payload only)
+    result = evaluate_certificate(
+        cert,
+        raw,
+        min_score=min_score,
+        jwks_url=jwks_url,
+        revoked_kids=rev["revoked_kids"],
+        revoked_scan_ids=rev["revoked_scan_ids"],
+    )
     sig = result["signature"]
 
     # 3. Informational, non-gating checks
